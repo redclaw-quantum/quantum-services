@@ -1,0 +1,45 @@
+# ion-design.toml — End-to-end trapped-ion / QCCD processor design
+#
+# Pipeline: /qion/design -> {/qion/ms-gate, /qion/modes}
+#   1. Lay out the QCCD trap (zones + junctions + species placement).
+#   2. In parallel: predict the Mølmer-Sørensen gate fidelity at the
+#      target motional frequency, and compute the normal-mode spectrum
+#      of an N-ion chain at the same trap frequency.
+#
+# All three stages use the generic `http_post` orchestrator stage to hit
+# their quantum-api endpoint — no per-endpoint Rust code is required.
+#
+# Typical runtime: ~5 s end-to-end.
+#
+# Usage:
+#   qorchestrate run templates/ion-design.toml \
+#       --params '{"species":"yb171"}'
+
+[pipeline]
+name = "ion-design"
+version = "1.0"
+description = "Trapped-ion QCCD trap → MS gate fidelity + motional spectrum"
+max_concurrency = 2
+default_timeout_secs = 60
+
+[pipeline.output]
+stage = "modes"
+field = "modes"
+artifact_key = "ion_design_{run_id}"
+
+[[stage]]
+id = "design"
+type = "http_post"
+params = { path = "/qion/design", type = "qccd", gate_zones = 4, storage_zones = 8, species = "ca40" }
+
+[[stage]]
+id = "ms_gate"
+type = "http_post"
+depends_on = ["design"]
+params = { path = "/qion/ms-gate", species = "ca40", mode_freq = 3.0 }
+
+[[stage]]
+id = "modes"
+type = "http_post"
+depends_on = ["design"]
+params = { path = "/qion/modes", ions = 5, trap_freq = 3.0, species = "ca40" }

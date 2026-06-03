@@ -1,0 +1,16 @@
+# Rust
+target/
+**/*.rs.bk
+
+# Cargo
+Cargo.lock.bak
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local-only
+.cargo/config.toml.local

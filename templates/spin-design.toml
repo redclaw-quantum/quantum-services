@@ -1,0 +1,52 @@
+# spin-design.toml — End-to-end silicon spin qubit processor design
+#
+# Pipeline: /qspin/design -> {/qspin/fidelity, /qspin/yield}
+#   1. Lay out a quantum-dot array (linear chain or crossbar) on the chosen
+#      fab platform (SiGe / SiMOS / FDSOI / FinFET).
+#   2. In parallel: predict gate fidelity for the selected operation under
+#      a realistic noise model, and estimate Monte-Carlo fabrication yield
+#      for the array.
+#
+# Both downstream stages use `http_post`'s `remap` to rename the upstream
+# stage's full output (which the executor exposes as `design_output`) into
+# the `array` field that /qspin/fidelity and /qspin/yield expect.
+#
+# Typical runtime: ~20 s end-to-end (yield Monte Carlo dominates).
+#
+# `platform` is deliberately left out of stage params so a parent
+# pipeline_call / batch / bayesian_outer_loop can inject it via pipeline
+# params. Standalone runs without --param platform=... fall through to the
+# qspin CLI default (sige).
+#
+# Usage:
+#   qorchestrate run templates/spin-design.toml \
+#       --params '{"platform":"sige","qubits":4,"gate":"cphase"}'
+
+[pipeline]
+name = "spin-design"
+version = "1.0"
+description = "Silicon spin-qubit dot array → gate fidelity + yield estimate"
+max_concurrency = 2
+default_timeout_secs = 120
+
+[pipeline.output]
+stage = "yield_est"
+field = "yield_percent"
+artifact_key = "spin_design_{run_id}"
+
+[[stage]]
+id = "design"
+type = "http_post"
+params = { path = "/qspin/design", layout = "linear", qubits = 4, rows = 2, cols = 4 }
+
+[[stage]]
+id = "fidelity"
+type = "http_post"
+depends_on = ["design"]
+params = { path = "/qspin/fidelity", gate = "cphase", noise = ["charge=1.0", "magnetic=1.0", "valley=0.1"], remap = { design_output = "array" } }
+
+[[stage]]
+id = "yield_est"
+type = "http_post"
+depends_on = ["design"]
+params = { path = "/qspin/yield", variation = 5.0, samples = 10000, remap = { design_output = "array" } }

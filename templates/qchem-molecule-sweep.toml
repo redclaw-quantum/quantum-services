@@ -1,0 +1,48 @@
+# qchem-molecule-sweep.toml — Batch over molecules to compare VQE resource
+# requirements across a representative chemistry suite.
+#
+# Pipeline shape:
+#   BatchStage
+#     inner = qchem-resources-single
+#     batch_over = molecules (5 entries: H2, LiH, BeH2, H2O, NH3)
+#
+# Each inner run POSTs to /qchem/resources via http_post and produces a
+# resource estimate. Batch aligns the 5 results with their inputs and
+# returns `[{item, output}, …]`.
+#
+# Real product question: how do qubit count, CNOT count, and circuit depth
+# scale with molecule complexity for the standard STO-3G / JW / UCCSD
+# pipeline?
+#
+# Usage:
+#   qorchestrate run --template qchem-molecule-sweep --templates-dir ...
+
+[pipeline]
+name = "qchem-molecule-sweep"
+version = "1.0"
+description = "Batch VQE resource estimate across a representative molecule set"
+max_concurrency = 1
+default_timeout_secs = 300
+
+[pipeline.output]
+stage = "sweep"
+field = "results"
+artifact_key = "qchem_sweep_{run_id}"
+
+[[stage]]
+id = "sweep"
+type = "batch"
+depends_on = []
+timeout_secs = 300
+
+[stage.params]
+inner_template = "qchem-resources-single"
+batch_over = "molecules"
+max_concurrency = 5
+molecules = [
+    { name = "H2" },
+    { name = "LiH" },
+    { name = "BeH2" },
+    { name = "H2O" },
+    { name = "NH3" },
+]

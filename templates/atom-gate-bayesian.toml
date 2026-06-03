@@ -1,0 +1,45 @@
+# atom-gate-bayesian.toml — Bayesian optimization of neutral-atom CZ gate
+# fidelity over (Rydberg principal quantum number n, atomic separation d).
+#
+# Pipeline shape:
+#   BayesianOuterLoop (GP + EI acquisition)
+#     inner template: atom-gate-only
+#     objective:      maximize `gate.fidelity` returned by /qatom/gate
+#     search space:   distance ∈ [3.0, 8.0] µm
+#                     n_rydberg ∈ [50, 80]
+#
+# 5 random exploration points + 10 EI-driven exploitation iterations.
+# Typical runtime: ~30 s (15 inner-pipeline runs × ~1 s each).
+#
+# Usage:
+#   qorchestrate run --template atom-gate-bayesian --templates-dir ...
+
+[pipeline]
+name = "atom-gate-bayesian"
+version = "1.0"
+description = "Bayesian search over (n_rydberg, distance) to maximize Rb-87 CZ fidelity"
+max_concurrency = 1
+default_timeout_secs = 600
+
+[pipeline.output]
+stage = "search"
+field = "best_output"
+artifact_key = "atom_gate_bayesian_{run_id}"
+
+[[stage]]
+id = "search"
+type = "bayesian_outer_loop"
+depends_on = []
+timeout_secs = 600
+
+[stage.params]
+inner_template = "atom-gate-only"
+objective_field = "gate.fidelity"
+objective_direction = "maximize"
+n_iterations = 10
+n_initial_random = 5
+acquisition = "expected_improvement"
+search_space = [
+    { param = "distance", low = 3.0, high = 8.0 },
+    { param = "n_rydberg", low = 50.0, high = 80.0 },
+]

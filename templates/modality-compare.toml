@@ -1,0 +1,63 @@
+# modality-compare.toml — Side-by-side design across all 3 non-SC modalities.
+#
+# Fans out to ion-design, atom-design, spin-design in parallel via
+# `pipeline_call`, then gathers the three resulting per-pipeline outputs
+# into a single structured response via `collect_deps`.
+#
+# Typical runtime: ~20 s end-to-end (bounded by the slowest inner pipeline,
+# usually spin-design's yield Monte Carlo).
+#
+# Usage:
+#   qorchestrate run --template modality-compare --templates-dir ...
+#
+# Output shape:
+#   {
+#     "ion":     { ...ion-design's pipeline.output... },
+#     "atom":    { ...atom-design's pipeline.output... },
+#     "spin":    { ...spin-design's pipeline.output... },
+#     ...input-level fields...
+#   }
+
+[pipeline]
+name = "modality-compare"
+version = "1.0"
+description = "Run ion + atom + spin design pipelines in parallel for comparison"
+max_concurrency = 3
+default_timeout_secs = 600
+
+[pipeline.output]
+stage = "summary"
+field = "summary"
+artifact_key = "modality_compare_{run_id}"
+
+# ── Fan out: one pipeline_call per modality ───────────────────────────────────
+
+[[stage]]
+id = "ion"
+type = "pipeline_call"
+depends_on = []
+timeout_secs = 120
+params = { template = "ion-design" }
+
+[[stage]]
+id = "atom"
+type = "pipeline_call"
+depends_on = []
+timeout_secs = 120
+params = { template = "atom-design" }
+
+[[stage]]
+id = "spin"
+type = "pipeline_call"
+depends_on = []
+timeout_secs = 180
+params = { template = "spin-design" }
+
+# ── Aggregate: emit the three inner-pipeline outputs as one structured result ──
+
+[[stage]]
+id = "summary"
+type = "collect_deps"
+depends_on = ["ion", "atom", "spin"]
+timeout_secs = 1
+params = {}

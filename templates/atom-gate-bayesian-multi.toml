@@ -1,0 +1,47 @@
+# atom-gate-bayesian-multi.toml — Bayesian search over a MIXED
+# (continuous + categorical) space.
+#
+# Continuous: distance ∈ [3.0, 8.0] µm,  n_rydberg ∈ [50, 80]
+# Categorical: species ∈ {rb87, cs133, yb171, sr87, er166}
+#
+# The categorical species dim lets the optimizer find which atomic
+# species pairs best with the Rydberg level and atom-atom distance —
+# different species have different C6 coefficients, so the optimal
+# (n, d) trade-off differs by species.
+#
+# 5 random exploration points + 12 EI-driven exploitation iterations.
+# Typical runtime: ~40 s.
+#
+# Usage:
+#   qorchestrate run --template atom-gate-bayesian-multi --templates-dir ...
+
+[pipeline]
+name = "atom-gate-bayesian-multi"
+version = "1.0"
+description = "Bayesian search over (species, n_rydberg, distance) — categorical + continuous"
+max_concurrency = 1
+default_timeout_secs = 600
+
+[pipeline.output]
+stage = "search"
+field = "best_output"
+artifact_key = "atom_gate_multi_{run_id}"
+
+[[stage]]
+id = "search"
+type = "bayesian_outer_loop"
+depends_on = []
+timeout_secs = 600
+
+[stage.params]
+inner_template = "atom-gate-only"
+objective_field = "gate.fidelity"
+objective_direction = "maximize"
+n_iterations = 12
+n_initial_random = 5
+acquisition = "expected_improvement"
+search_space = [
+    { param = "distance", low = 3.0, high = 8.0 },
+    { param = "n_rydberg", low = 50.0, high = 80.0 },
+    { param = "species", choices = ["rb87", "cs133", "yb171", "sr87", "er166"] },
+]

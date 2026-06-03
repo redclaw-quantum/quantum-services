@@ -1,0 +1,131 @@
+[pipeline]
+name = "design-to-chip"
+version = "1.1"
+description = "Hamiltonian targets → fabrication-ready OQFP chip spec"
+max_concurrency = 4
+default_timeout_secs = 300
+
+[pipeline.output]
+stage = "oqfp_validate"
+field = "validated_spec"
+artifact_key = "chip_spec_v{run_id}"
+
+# ── Stage 1: Inverse design (RMFlow, fallback CMA-ES) ─────────────────────────
+
+[[stage]]
+id = "inverse_design"
+type = "qpudidp_rmflow"
+depends_on = []
+timeout_secs = 15
+
+[stage.params]
+n_candidates = 5
+
+[stage.fallback]
+type = "qpudidp_cmaes"
+timeout_secs = 60
+
+[stage.retry]
+max_attempts = 2
+backoff_secs = 3
+
+# ── Stage 2: qem oracle validation (conditional: only if surrogate UQ > 5%) ───
+
+[[stage]]
+id = "qem_validate"
+type = "qem_solve"
+depends_on = ["inverse_design"]
+timeout_secs = 30
+
+[stage.condition]
+field = "inverse_design.output.best_candidate.uncertainty_std"
+op = "gt"
+value = 0.05
+
+[stage.params]
+solver = "analytical"
+
+[stage.fallback]
+type = "skip"
+timeout_secs = 1
+
+# ── Stage 3: SC qubit device physics ──────────────────────────────────────────
+
+[[stage]]
+id = "scq_device"
+type = "scq_simulate"
+depends_on = ["inverse_design"]
+timeout_secs = 10
+
+# ── Stages 4, 5, 6: parallel — freq planning, crosstalk, readout ──────────────
+
+[[stage]]
+id = "freq_plan"
+type = "freq_optimize"
+depends_on = ["scq_device"]
+timeout_secs = 30
+
+[stage.params]
+topology = "heavy_hex"
+optimizer = "simulated_annealing"
+
+[[stage]]
+id = "xtalk_analyze"
+type = "xtalk_analyze"
+depends_on = ["scq_device"]
+timeout_secs = 30
+
+[[stage]]
+id = "readout_design"
+type = "readout_design"
+depends_on = ["scq_device"]
+timeout_secs = 15
+
+# ── Stage 7: Pulse optimization (conditional: only if fidelity < 99.9%) ───────
+
+[[stage]]
+id = "pulse_optimize"
+type = "grape_optimize"
+depends_on = ["freq_plan", "xtalk_analyze"]
+timeout_secs = 120
+
+[stage.condition]
+field = "xtalk_analyze.output.worst_case_gate_fidelity"
+op = "lt"
+value = 0.9990
+
+[stage.fallback]
+type = "drag_optimize"
+timeout_secs = 10
+
+# ── Stage 8: QEC threshold assessment ─────────────────────────────────────────
+
+[[stage]]
+id = "qec_assess"
+type = "pqec_assess"
+depends_on = ["pulse_optimize"]
+timeout_secs = 60
+
+# ── Stage 9: Quantum volume / CLOPS benchmark prediction ──────────────────────
+
+[[stage]]
+id = "bench_predict"
+type = "bench_predict"
+depends_on = ["qec_assess"]
+timeout_secs = 10
+
+# ── Stage 10: Assemble 8-layer OQFP ──────────────────────────────────────────
+
+[[stage]]
+id = "oqfp_build"
+type = "oqfp_build"
+depends_on = ["bench_predict", "freq_plan", "xtalk_analyze", "readout_design", "qec_assess"]
+timeout_secs = 10
+
+# ── Stage 11: Validate OQFP layer completeness ───────────────────────────────
+
+[[stage]]
+id = "oqfp_validate"
+type = "oqfp_validate"
+depends_on = ["oqfp_build"]
+timeout_secs = 5

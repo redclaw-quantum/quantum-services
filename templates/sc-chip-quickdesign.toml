@@ -1,0 +1,55 @@
+# sc-chip-quickdesign.toml — Minimal superconducting chip design pipeline.
+#
+# Lighter weight than `chip_design.toml` / `design-to-chip.toml` (both PRE-
+# EXISTING failing — they expect upstream layout construction this build
+# doesn't provide). Uses the "simple" quantum-api endpoints that build their
+# own layouts from rows×cols and topology params.
+#
+# Pipeline: /freq/optimize → /xtalk/zz-simple ∥ /bench/predict → collect_deps
+#
+# Real product question answered: for a 3×3 heavy-hex superconducting array
+# with default coupling parameters, what's the frequency-assignment quality
+# AND what's the predicted RB / QV?
+#
+# Tools required on PATH (built by `build-quantum.sh` + the SC-tools
+# extension that builds quantum-{freq,xtalk,readout,bench}):
+#   - freq, xtalk, bench
+#
+# Usage:
+#   qorchestrate run --template sc-chip-quickdesign --templates-dir …
+
+[pipeline]
+name = "sc-chip-quickdesign"
+version = "1.0"
+description = "Lightweight SC chip design: freq assignment + xtalk + bench in parallel"
+max_concurrency = 3
+default_timeout_secs = 120
+
+[pipeline.output]
+stage = "summary"
+field = "summary"
+artifact_key = "sc_chip_quickdesign_{run_id}"
+
+[[stage]]
+id = "freq_opt"
+type = "http_post"
+depends_on = []
+params = { path = "/freq/optimize", topology = "heavy_hex", rows = 3, cols = 3 }
+
+[[stage]]
+id = "xtalk_zz"
+type = "http_post"
+depends_on = []
+params = { path = "/xtalk/zz-simple", rows = 3, cols = 3, qubit_freq_ghz = 5.0, coupling_g_mhz = 3.0 }
+
+[[stage]]
+id = "bench"
+type = "http_post"
+depends_on = []
+params = { path = "/bench/predict", n_qubits = 9, t1 = 80.0, t2 = 60.0, gate_fidelity = 0.999, readout_fidelity = 0.997, trials = 500 }
+
+[[stage]]
+id = "summary"
+type = "collect_deps"
+depends_on = ["freq_opt", "xtalk_zz", "bench"]
+params = {}

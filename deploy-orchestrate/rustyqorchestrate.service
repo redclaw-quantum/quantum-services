@@ -1,0 +1,23 @@
+[Unit]
+Description=rustyqorchestrate — Quantum Pipeline Orchestrator
+After=network.target quantum-api.service
+Wants=quantum-api.service
+
+[Service]
+Type=simple
+User=osobh
+ExecStart=/usr/local/bin/qorchestrate serve \
+    --port 8767 \
+    --quantum-api-url http://localhost:8765 \
+    --qpudidp-url http://localhost:8420 \
+    --templates-dir /nvme/quantum/rustyqorchestrate/templates \
+    --brain-path /nvme/quantum/data/brains/lab3-qpu.brain \
+    --checkpoint-dir /nvme/quantum/data/checkpoints \
+    --monitor-chip lab3-qpu \
+    --monitor-interval 600
+Restart=on-failure
+RestartSec=5
+Environment=RUST_LOG=info
+
+[Install]
+WantedBy=multi-user.target

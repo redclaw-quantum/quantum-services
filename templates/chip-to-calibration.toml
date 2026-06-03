@@ -1,0 +1,66 @@
+[pipeline]
+name = "chip-to-calibration"
+version = "1.0"
+description = "Measured hardware → deviation analysis → recalibration geometry proposals (replaces recal_trigger.sh)"
+max_concurrency = 2
+default_timeout_secs = 120
+
+[pipeline.output]
+stage = "recal_report"
+field = "recal_actions"
+artifact_key = "recal_{chip_id}_{run_id}"
+
+# ── Stage 1: Digital twin comparison ─────────────────────────────────────────
+
+[[stage]]
+id = "twin_compare"
+type = "twin_compare"
+depends_on = []
+timeout_secs = 30
+
+# ── Stages 2 + 3: parallel — recalibration geometry + QEC reassessment ────────
+
+[[stage]]
+id = "twin_recalibrate"
+type = "twin_recalibrate"
+depends_on = ["twin_compare"]
+timeout_secs = 15
+
+[[stage]]
+id = "qec_reassess"
+type = "twin_qec_update"
+depends_on = ["twin_compare"]
+timeout_secs = 15
+
+# ── Stage 4: Geometry retune via RMFlow (conditional: only if critical > 0) ───
+# Three-tier fallback mirrors recal_trigger.sh: RMFlow → CMA-ES → qem oracle
+
+[[stage]]
+id = "pulse_retune"
+type = "qpudidp_rmflow"
+depends_on = ["twin_recalibrate"]
+timeout_secs = 15
+
+[stage.condition]
+field = "twin_compare.output.critical_count"
+op = "gt"
+value = 0
+
+[stage.params]
+n_candidates = 3
+
+[stage.fallback]
+type = "qpudidp_cmaes"
+timeout_secs = 60
+
+[stage.retry]
+max_attempts = 2
+backoff_secs = 5
+
+# ── Stage 5: Assemble recalibration report ────────────────────────────────────
+
+[[stage]]
+id = "recal_report"
+type = "oqfp_build"
+depends_on = ["twin_recalibrate", "pulse_retune", "qec_reassess"]
+timeout_secs = 10

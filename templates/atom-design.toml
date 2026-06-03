@@ -1,0 +1,45 @@
+# atom-design.toml — End-to-end neutral-atom / Rydberg processor design
+#
+# Pipeline: /qatom/design -> {/qatom/gate, /qatom/zone-layout}
+#   1. Generate an optical-tweezer array (square / triangular / honeycomb /
+#      kagome / ring).
+#   2. In parallel: design a CZ gate between two atoms at the chosen
+#      Rydberg level, and lay out a QuEra-style zoned architecture
+#      (storage / entangling / readout / reservoir) for the qubit count.
+#
+# All three stages use the generic `http_post` orchestrator stage.
+#
+# Typical runtime: ~5 s end-to-end.
+#
+# Usage:
+#   qorchestrate run templates/atom-design.toml \
+#       --params '{"species":"yb171","n_rydberg":70,"distance":4.0}'
+
+[pipeline]
+name = "atom-design"
+version = "1.0"
+description = "Neutral-atom tweezer array → CZ gate + zoned architecture"
+max_concurrency = 2
+default_timeout_secs = 60
+
+[pipeline.output]
+stage = "zone_layout"
+field = "full_cycle_us"
+artifact_key = "atom_design_{run_id}"
+
+[[stage]]
+id = "design"
+type = "http_post"
+params = { path = "/qatom/design", rows = 10, cols = 10, spacing = 5.0, species = "rb87", array = "square" }
+
+[[stage]]
+id = "gate"
+type = "http_post"
+depends_on = ["design"]
+params = { path = "/qatom/gate", species = "rb87", n_rydberg = 60, distance = 5.0 }
+
+[[stage]]
+id = "zone_layout"
+type = "http_post"
+depends_on = ["design"]
+params = { path = "/qatom/zone-layout", n_storage = 100, n_entangling = 10, n_readout = 20, n_reservoir = 30, transport_speed_um_per_us = 50.0, zone_spacing_um = 200.0, species = "rb87", gate_time_us = 0.5 }

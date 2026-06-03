@@ -1,0 +1,30 @@
+# qec_assessment.toml — QEC threshold + surgery resource + pulse-QEC pipeline
+#
+# Stages: QecThreshold → SurgeryResources → PqecAssess
+# Typical runtime: ~45 s on quantum-api:8765
+#
+# Usage:
+#   qorchestrate run templates/qec_assessment.toml
+
+[pipeline]
+name = "qec_assessment"
+version = "1.0"
+max_concurrency = 1
+default_timeout_secs = 120
+
+[[stage]]
+id = "threshold"
+type = "qec_threshold"
+params = { code = "surface", distances = "3,5,7", shots = 1000 }
+
+[[stage]]
+id = "surgery"
+type = "surgery_resources"
+depends_on = ["threshold"]
+params = { distances = [3, 5, 7] }
+
+[[stage]]
+id = "pqec"
+type = "pqec_assess"
+depends_on = ["surgery"]
+params = { code = "surface", distance = 5, physical_error = 1e-3 }

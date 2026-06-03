@@ -1,0 +1,112 @@
+# parametric-amp-design.toml — End-to-end parametric amplifier design.
+#
+# Pipeline: S-parameters → BBQ Foster-quantize → bridge to qcirc HamiltonianSpec
+#  → identify parametric processes → design pump → Floquet → regime scan
+#  → circuit constraints → summary.
+#
+# This is the rewritten, working version. The original (pre-§4.6 patterns
+# era) is still under templates/disabled/ for historical reference of the
+# design intent that motivated this rewrite.
+#
+# Key changes vs the original:
+# - Every stage now uses the generic `http_post` orchestrate stage; no
+#   per-endpoint Rust struct is needed.
+# - `QemSolve` was the original stage 1 — it remains out of scope for the
+#   smoke test because it needs the (substantial) qem-rs FEM stack on
+#   PATH and a geometry input. Instead this template starts from
+#   pre-computed S-parameters which the user provides as a pipeline param
+#   `s_params={…}`. Future iteration can prepend a `qem_solve` stage.
+# - `BbqQuantize` and `BbqToQcirc` (which were never registered as stage
+#   variants) are now plain `http_post` calls to `/bbq/quantize` and
+#   `/bbq/to-qcirc`. The `/bbq/to-qcirc` endpoint is new in this session;
+#   it wraps the existing `rustybbq to-qcirc` CLI subcommand that bridges
+#   BBQ output → qcirc HamiltonianSpec.
+# - The `qcirc_*` stages reuse the 7 handlers that landed when fixing
+#   `parametric-process-design.toml`.
+#
+# Usage:
+#   qorchestrate run --template parametric-amp-design --templates-dir … \
+#       --param 's_params={"frequencies_ghz":[4.5,5.0,5.5],"data":[[…]],"port_count":1,"z_ref":50.0}' \
+#       --param junction_port_indices='[0]' \
+#       --param junction_charging_energies_ghz='[0.3]'
+
+[pipeline]
+name = "parametric-amp-design"
+version = "1.1"
+description = "End-to-end parametric amplifier: S-params → BBQ → qcirc → pump + regime constraints"
+max_concurrency = 2
+default_timeout_secs = 600
+
+[pipeline.output]
+stage = "process_summary"
+field = "summary"
+artifact_key = "parametric_amp_{run_id}"
+
+# ── Stage 1: BBQ quantize — S-parameters → BbqQuantResult ─────────────────────
+
+[[stage]]
+id = "bbq_quantize"
+type = "http_post"
+depends_on = []
+params = { path = "/bbq/quantize", n_poles_max = 2, dw_ghz = 0.0001 }
+
+# ── Stage 2: Bridge BBQ result → qcirc HamiltonianSpec ────────────────────────
+# `/bbq/to-qcirc` auto-finds the upstream output via the `mode_frequencies_ghz`
+# marker; no explicit `remap` needed.
+
+[[stage]]
+id = "bbq_to_qcirc"
+type = "http_post"
+depends_on = ["bbq_quantize"]
+params = { path = "/bbq/to-qcirc", n_levels = "5,4" }
+
+# ── Stage 3: Identify parametric processes ────────────────────────────────────
+# `/qcirc/processes` auto-finds the HamiltonianSpec via the `modes` marker.
+
+[[stage]]
+id = "qcirc_processes"
+type = "http_post"
+depends_on = ["bbq_to_qcirc"]
+params = { path = "/qcirc/processes", tolerance_ghz = 0.1 }
+
+# ── Stage 4: Pump design for the dominant 3WM process ─────────────────────────
+
+[[stage]]
+id = "qcirc_pump_design"
+type = "http_post"
+depends_on = ["qcirc_processes", "bbq_to_qcirc"]
+params = { path = "/qcirc/pump-design", process = "3wm_diff" }
+
+# ── Stage 5: Floquet at the pump operating point ──────────────────────────────
+
+[[stage]]
+id = "qcirc_floquet"
+type = "http_post"
+depends_on = ["qcirc_pump_design", "bbq_to_qcirc"]
+params = { path = "/qcirc/floquet" }
+timeout_secs = 90
+
+# ── Stage 6: Regime scan — Pareto-optimal operating point ─────────────────────
+
+[[stage]]
+id = "qcirc_regime_scan"
+type = "http_post"
+depends_on = ["qcirc_pump_design", "bbq_to_qcirc"]
+params = { path = "/qcirc/regime-scan", process = "3wm_diff", sweep = "flux_dc:0.35:0.45:10,pump_amp:0.001:0.05:15" }
+timeout_secs = 180
+
+# ── Stage 7: Constraints from regime scan ─────────────────────────────────────
+
+[[stage]]
+id = "qcirc_constraints"
+type = "http_post"
+depends_on = ["qcirc_regime_scan"]
+params = { path = "/qcirc/constraints" }
+
+# ── Stage 8: Final summary ────────────────────────────────────────────────────
+
+[[stage]]
+id = "process_summary"
+type = "http_post"
+depends_on = ["qcirc_constraints", "qcirc_floquet", "qcirc_processes"]
+params = { path = "/qcirc/summary" }

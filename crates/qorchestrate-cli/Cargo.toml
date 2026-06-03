@@ -1,0 +1,31 @@
+[package]
+name = "qorchestrate-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "qorchestrate"
+path = "src/main.rs"
+
+[dependencies]
+qorchestrate-core = { workspace = true }
+qorchestrate-executor = { workspace = true }
+qorchestrate-stages = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tokio = { workspace = true }
+axum = { workspace = true }
+tower-http = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+qservices-common = { workspace = true }
+clap = { workspace = true }
+reqwest = { workspace = true }
+tokio-stream = { workspace = true }
+futures = { workspace = true }
+
+[dev-dependencies]
+tower = { version = "0.4", features = ["util"] }

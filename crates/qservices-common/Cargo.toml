@@ -1,0 +1,13 @@
+[package]
+name = "qservices-common"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Shared HTTP-service plumbing for quantum-api, quantum-jobs, and qorchestrate — tracing init and JSON error envelope. Extracted per /home/osobh/projects/quantum-consolidation-audit.md §4.8 follow-up."
+
+[dependencies]
+anyhow = { workspace = true }
+axum = { workspace = true }
+serde_json = { workspace = true }
+tracing-subscriber = { workspace = true }

@@ -1,0 +1,70 @@
+# full_design.toml — Full-stack quantum chip design pipeline
+#
+# Stages:
+#   1. qpudidp_rmflow   — inverse design: qubit geometry from target frequencies
+#   2. freq_optimize    — chip-level frequency assignment
+#   3. xtalk_analyze    — crosstalk ZZ coupling analysis
+#   4. readout_design   — readout resonator design
+#   5. grape_optimize   — optimal control pulse design
+#   6. bench_predict    — benchmark predicted performance
+#   7. twin_compare     — compare design against digital twin
+#   8. qec_threshold    — surface code threshold simulation (independent)
+#
+# Typical runtime: 2–5 min (GRAPE/QEM are slow; threshold is fast)
+#
+# Usage:
+#   qorchestrate run templates/full_design.toml \
+#     --params '{"qubit_frequency_ghz":5.0,"anharmonicity_mhz":-250,"topology":"heavy_hex"}'
+
+[pipeline]
+name = "full_design"
+version = "1.0"
+max_concurrency = 3
+default_timeout_secs = 300
+
+[[stage]]
+id = "rmflow"
+type = "qpudidp_rmflow"
+params = { device_type = "transmon", qubit_frequency_ghz = 5.0, anharmonicity_mhz = -250.0 }
+
+[[stage]]
+id = "freq_opt"
+type = "freq_optimize"
+depends_on = ["rmflow"]
+params = { topology = "heavy_hex", rows = 3, cols = 3 }
+
+[[stage]]
+id = "xtalk"
+type = "xtalk_analyze"
+depends_on = ["freq_opt"]
+params = {}
+
+[[stage]]
+id = "readout"
+type = "readout_design"
+depends_on = ["freq_opt"]
+params = { qubit_freq = 5.0, anharmonicity = -250.0, target_fidelity = 0.999 }
+
+[[stage]]
+id = "grape"
+type = "grape_optimize"
+depends_on = ["readout"]
+params = { target = "X", steps = 100, duration = 40.0, iterations = 300 }
+timeout_secs = 120
+
+[[stage]]
+id = "bench"
+type = "bench_predict"
+depends_on = ["xtalk", "grape"]
+params = { n_qubits = 20, t1 = 80, t2 = 60, gate_fidelity = 0.9987, readout_fidelity = 0.997 }
+
+[[stage]]
+id = "twin"
+type = "twin_compare"
+depends_on = ["bench"]
+params = {}
+
+[[stage]]
+id = "qec"
+type = "qec_threshold"
+params = { code = "surface", distances = "3,5,7", shots = 1000 }

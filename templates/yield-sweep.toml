@@ -1,0 +1,62 @@
+[pipeline]
+name = "yield-sweep"
+version = "1.0"
+description = "Monte Carlo yield sweep over fabrication parameter space — identifies common failure modes"
+max_concurrency = 8
+default_timeout_secs = 600
+
+[pipeline.output]
+stage = "yield_report"
+field = "yield_report"
+artifact_key = "yield_sweep_{run_id}"
+
+# ── Stage 1: Pareto-optimal design point discovery ────────────────────────────
+
+[[stage]]
+id = "explore_pareto"
+type = "qexplore_pareto"
+depends_on = []
+timeout_secs = 30
+
+[stage.params]
+objectives = ["qubits", "yield", "cost"]
+budget = "research"
+
+# ── Stage 2: Parallel design-to-chip for each Pareto design point ─────────────
+
+[[stage]]
+id = "batch_design"
+type = "batch"
+depends_on = ["explore_pareto"]
+timeout_secs = 300
+
+[stage.params]
+inner_template = "design-to-chip"
+batch_over = "pareto_front"
+max_concurrency = 4
+
+# ── Stages 3 + 4: parallel — frequency yield MC + twin yield batch ────────────
+
+[[stage]]
+id = "freq_yield_mc"
+type = "freq_yield"
+depends_on = ["batch_design"]
+timeout_secs = 120
+
+[stage.params]
+sigma_mhz = 10.0
+samples = 10000
+
+[[stage]]
+id = "twin_yield_batch"
+type = "twin_compare"
+depends_on = ["batch_design"]
+timeout_secs = 60
+
+# ── Stage 5: Aggregate yield report ──────────────────────────────────────────
+
+[[stage]]
+id = "yield_report"
+type = "freq_yield"
+depends_on = ["freq_yield_mc", "twin_yield_batch"]
+timeout_secs = 10

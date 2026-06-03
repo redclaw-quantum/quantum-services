@@ -1,0 +1,16 @@
+[Unit]
+Description=QuantumRedClaw Async Job Queue
+After=network.target quantum-api.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/quantum-jobs
+Restart=on-failure
+RestartSec=5
+Environment=QUANTUM_JOBS_PORT=8766
+Environment=QEM_URL=http://127.0.0.1:8430
+Environment=QPUDIDP_URL=http://127.0.0.1:8420
+Environment=RUST_LOG=quantum_jobs=info,tower_http=warn
+
+[Install]
+WantedBy=multi-user.target

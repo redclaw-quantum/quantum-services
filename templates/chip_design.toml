@@ -1,0 +1,36 @@
+# chip_design.toml — Standard chip frequency/crosstalk/readout/benchmark pipeline
+#
+# Stages: FreqOptimize → XtalkAnalyze → ReadoutDesign → BenchPredict
+# Typical runtime: ~30 s on quantum-api:8765
+#
+# Usage:
+#   qorchestrate run templates/chip_design.toml --params '{"topology":"heavy_hex","rows":3,"cols":3}'
+
+[pipeline]
+name = "chip_design"
+version = "1.0"
+max_concurrency = 2
+default_timeout_secs = 60
+
+[[stage]]
+id = "freq_opt"
+type = "freq_optimize"
+params = { topology = "heavy_hex", rows = 3, cols = 3 }
+
+[[stage]]
+id = "xtalk"
+type = "xtalk_analyze"
+depends_on = ["freq_opt"]
+params = {}
+
+[[stage]]
+id = "readout"
+type = "readout_design"
+depends_on = ["freq_opt"]
+params = { qubit_freq = 5.0, anharmonicity = -250.0, target_fidelity = 0.999 }
+
+[[stage]]
+id = "bench"
+type = "bench_predict"
+depends_on = ["xtalk", "readout"]
+params = { n_qubits = 20, t1 = 80, t2 = 60, gate_fidelity = 0.9987, readout_fidelity = 0.997 }

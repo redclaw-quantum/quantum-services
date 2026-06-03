@@ -1,0 +1,36 @@
+[pipeline]
+name = "active-design-loop"
+version = "1.0"
+description = "Bayesian outer optimization: vary Hamiltonian targets, minimize QEC logical error rate over N iterations"
+max_concurrency = 2
+default_timeout_secs = 7200
+
+[pipeline.output]
+stage = "bayes_outer"
+field = "best_output"
+artifact_key = "active_design_{run_id}"
+
+# ── Stage 1: Bayesian outer loop ──────────────────────────────────────────────
+# GP surrogate (RBF kernel) + Expected Improvement acquisition.
+# Runs design-to-chip as the inner oracle for each candidate parameter point.
+# search_space, n_iterations, n_initial_random are passed as pipeline params at submit time.
+
+[[stage]]
+id = "bayes_outer"
+type = "bayesian_outer_loop"
+depends_on = []
+timeout_secs = 7200
+
+[stage.params]
+inner_template = "design-to-chip"
+objective_field = "qec.meets_threshold"
+objective_direction = "minimize"
+n_iterations = 20
+n_initial_random = 5
+acquisition = "expected_improvement"
+
+# Default search space — override via pipeline_params at submit time:
+# search_space = [
+#   { param = "qubit_frequency_ghz", low = 4.5, high = 5.5 },
+#   { param = "anharmonicity_mhz",   low = -350.0, high = -150.0 },
+# ]

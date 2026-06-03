@@ -1,0 +1,170 @@
+[pipeline]
+name = "parametric-process-design"
+version = "1.0"
+description = "Circuit netlist → parametric process identification → pump design → Floquet regime → circuit constraints"
+max_concurrency = 2
+default_timeout_secs = 300
+
+[pipeline.output]
+stage = "process_summary"
+field = "summary"
+artifact_key = "parametric_design_{run_id}"
+
+# ── Stage 1: Quantize circuit netlist → QuantizedCircuit ──────────────────────
+#
+# Input params (pass via --param or pipeline input JSON):
+#   netlist          : NetlistSpec JSON { "nodes": [...], "branches": [...] }
+#   taylor_order     : int (default 4, use 6 for SNAIL)
+#
+# Output: { "circuit": QuantizedCircuit, "modes": [...], "nonlinear_terms": [...] }
+
+[[stage]]
+id = "qcirc_quantize"
+type = "qcirc_quantize"
+depends_on = []
+timeout_secs = 30
+
+[stage.params]
+taylor_order = 4
+
+[stage.retry]
+max_attempts = 2
+backoff_secs = 2
+
+# ── Stage 2: Identify all parametric processes ────────────────────────────────
+#
+# Output: { "processes": [{ "process_type": "ThreeWaveMixing"|"FourWaveMixing"|
+#           "Kerr"|"CrossKerr"|..., "coupling_mhz": f64,
+#           "pump_frequency_ghz": f64, "modes": [...] }, ...] }
+
+[[stage]]
+id = "qcirc_processes"
+type = "qcirc_processes"
+depends_on = ["qcirc_quantize"]
+timeout_secs = 15
+
+# ── Stage 3: Design pump for the dominant process ─────────────────────────────
+#
+# Input params:
+#   target_process  : "ThreeWaveMixing" | "FourWaveMixing" | "CrossKerr" (default: first from stage 2)
+#   pump_type       : "FluxModulation" | "ChargeModulation" | "MicrowaveDrive"
+#
+# Output: { "pump_type": str, "pump_frequency_ghz": f64,
+#           "pump_amplitude": f64, "drive_operator": {...} }
+
+[[stage]]
+id = "qcirc_pump_design"
+type = "qcirc_pump_design"
+depends_on = ["qcirc_processes", "qcirc_quantize"]
+timeout_secs = 15
+
+[stage.params]
+pump_type = "FluxModulation"
+
+# ── Stage 4: Floquet simulation at the pump design point ──────────────────────
+#
+# Runs only if the pump design produced a non-trivial coupling (> 0.1 MHz).
+# Fallback to skip if no active process was found.
+#
+# Input params:
+#   n_fock    : int (default 3)
+#   n_floquet : int (default 5, number of Floquet sidebands ±n)
+#
+# Output: { "quasi_energies": [...], "n_collisions": int,
+#           "collision_free": bool, "heating_rate_mhz": f64,
+#           "effective_coupling_mhz": f64 }
+
+[[stage]]
+id = "qcirc_floquet"
+type = "qcirc_floquet"
+depends_on = ["qcirc_pump_design", "qcirc_quantize"]
+timeout_secs = 60
+
+[stage.params]
+n_fock = 3
+n_floquet = 5
+
+[stage.condition]
+field = "qcirc_pump_design.output.pump_amplitude"
+op = "gt"
+value = 0.0
+
+[stage.fallback]
+type = "skip"
+timeout_secs = 1
+
+# ── Stage 5: Regime scan — sweep pump amplitude × frequency ──────────────────
+#
+# Finds the Pareto-optimal operating regime (maximize coupling,
+# minimize heating, avoid collisions).
+#
+# Input params:
+#   n_amp  : int — amplitude grid points (default 8)
+#   n_freq : int — frequency grid points (default 10)
+#
+# Output: { "pareto_front": [RegimePoint, ...],
+#           "best_point": RegimePoint,
+#           "collision_free_fraction": f64 }
+
+[[stage]]
+id = "qcirc_regime_scan"
+type = "qcirc_regime_scan"
+depends_on = ["qcirc_pump_design", "qcirc_quantize"]
+timeout_secs = 120
+
+[stage.params]
+n_amp = 8
+n_freq = 10
+
+[stage.condition]
+field = "qcirc_floquet.output.collision_free"
+op = "neq"
+value = false
+
+[stage.fallback]
+type = "skip"
+timeout_secs = 1
+
+[stage.retry]
+max_attempts = 2
+backoff_secs = 5
+
+# ── Stage 6: Extract circuit parameter constraints from regime scan ────────────
+#
+# Maps operating regimes back to circuit parameter ranges (E_J, E_C, α, flux).
+# Conditional on the regime scan having found at least one collision-free point.
+#
+# Output: { "constraints": { "ej_range_ghz": [min, max], ... },
+#           "n_valid_points": int, "constraint_tightness": str }
+
+[[stage]]
+id = "qcirc_constraints"
+type = "qcirc_constraints"
+depends_on = ["qcirc_regime_scan"]
+timeout_secs = 15
+
+[stage.condition]
+field = "qcirc_regime_scan.output.collision_free_fraction"
+op = "gt"
+value = 0.0
+
+[stage.fallback]
+type = "skip"
+timeout_secs = 1
+
+# ── Stage 7: Assemble final parametric process report ─────────────────────────
+#
+# Merges all upstream outputs into a unified ParametricProcessReport.
+# Always runs regardless of upstream conditions.
+#
+# Output: { "summary": { dominant_process, n_processes_identified,
+#             pump_type, pump_frequency_ghz, floquet_collision_free,
+#             n_pareto_regime_points },
+#           "processes": ..., "pump_design": ..., "floquet": ...,
+#           "regime_scan": ..., "circuit_constraints": ... }
+
+[[stage]]
+id = "process_summary"
+type = "qcirc_summary"
+depends_on = ["qcirc_constraints", "qcirc_floquet", "qcirc_processes"]
+timeout_secs = 5

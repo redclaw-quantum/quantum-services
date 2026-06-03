@@ -1,0 +1,84 @@
+# quantum-services — consolidated workspace for the HTTP/orchestration
+# surface (formerly quantum-api, quantum-jobs, quantum-orchestrate).
+#
+# See README-{api,orchestrate}.md and CLAUDE-{api,jobs,orchestrate}.md for
+# per-service documentation preserved from the source workspaces.
+#
+# **Binaries are deliberately kept separate** so each service can be
+# deployed, scaled, and restarted independently:
+#   - quantum-api    (port 8765) — REST gateway for Tier 1 CLI tools
+#   - quantum-jobs   (port 8766) — async job queue + sidecar proxies
+#   - qorchestrate   (port 8767) — pipeline DAG executor
+#
+# The merge gives us a single CI target, a single Cargo.lock, and a single
+# place to track the shared HTTP/tracing/error-envelope dep stack. The
+# deployment topology is unchanged.
+#
+# Merged per /home/osobh/projects/quantum-consolidation-audit.md §4.8.
+
+[workspace]
+resolver = "3"
+members = [
+    # Single-binary services
+    "crates/quantum-api",
+    "crates/quantum-jobs",
+    # Orchestrate multi-crate workspace
+    "crates/qorchestrate-core",
+    "crates/qorchestrate-executor",
+    "crates/qorchestrate-stages",
+    "crates/qorchestrate-cli",
+    # Shared HTTP-service plumbing (§4.8 follow-up)
+    "crates/qservices-common",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "LicenseRef-RedClaw-Proprietary"
+repository = "https://github.com/quantumredclaw/quantum-services"
+authors = ["QuantumRedClaw"]
+
+[workspace.dependencies]
+# Async runtime + HTTP — shared by all three services.
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json"] }
+axum = { version = "0.7", features = ["http2", "json"] }
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# IDs + time (jobs uses uuid + chrono; orchestrate uses both heavily).
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# Async utilities (orchestrate-specific but small).
+futures = "0.3"
+async-trait = "0.1"
+tokio-stream = { version = "0.1", features = ["sync"] }
+
+# Error handling
+anyhow = "1"
+thiserror = "2"
+
+# Observability
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# CLI
+clap = { version = "4", features = ["derive", "env"] }
+
+# Misc
+tempfile = "3"
+dashmap = "5"
+
+# Math (orchestrate's optional Bayesian GP layer).
+nalgebra = "0.34"
+
+# Intra-workspace dependencies — paths point into crates/
+qorchestrate-core = { path = "crates/qorchestrate-core" }
+qorchestrate-executor = { path = "crates/qorchestrate-executor" }
+qorchestrate-stages = { path = "crates/qorchestrate-stages" }
+qservices-common = { path = "crates/qservices-common" }

@@ -1,0 +1,64 @@
+[pipeline]
+name = "full-loop"
+version = "1.0"
+description = "Full design lifecycle: Hamiltonian targets → fabricate-ready OQFP → mock measure → twin → recalibrate → re-optimize"
+max_concurrency = 4
+default_timeout_secs = 900
+
+[pipeline.output]
+stage = "reoptimize"
+field = "final_spec"
+artifact_key = "full_loop_{run_id}"
+
+# ── Stage 1: Full forward design ──────────────────────────────────────────────
+
+[[stage]]
+id = "design_phase"
+type = "pipeline_call"
+depends_on = []
+timeout_secs = 600
+
+[stage.params]
+template = "design-to-chip"
+
+# ── Stage 2: Simulate hardware measurement with noise ─────────────────────────
+
+[[stage]]
+id = "mock_measure"
+type = "twin_mock"
+depends_on = ["design_phase"]
+timeout_secs = 10
+
+[stage.params]
+drift_scale = 0.05
+
+# ── Stage 3: Compare twin and propose recalibration ───────────────────────────
+
+[[stage]]
+id = "calibration_phase"
+type = "pipeline_call"
+depends_on = ["mock_measure"]
+timeout_secs = 300
+
+[stage.params]
+template = "chip-to-calibration"
+
+# ── Stage 4: Re-optimize design (conditional: only if calibration found critical issues) ──
+
+[[stage]]
+id = "reoptimize"
+type = "pipeline_call"
+depends_on = ["calibration_phase"]
+timeout_secs = 600
+
+[stage.condition]
+field = "calibration_phase.output.recal_actions.critical_count"
+op = "gt"
+value = 0
+
+[stage.params]
+template = "design-to-chip"
+
+[stage.fallback]
+type = "skip"
+timeout_secs = 1

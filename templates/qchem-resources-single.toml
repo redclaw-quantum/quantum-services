@@ -1,0 +1,27 @@
+# qchem-resources-single.toml — Single-molecule VQE resource estimate via the
+# generic `http_post` stage.
+#
+# Demonstrates that `http_post` can hit any quantum-api endpoint without a
+# per-endpoint stage struct. The body (everything except `path` and
+# `template`) is POSTed as JSON to the endpoint and the response is the
+# stage output.
+#
+# Inner template for qchem-molecule-sweep.toml.
+
+[pipeline]
+name = "qchem-resources-single"
+version = "1.0"
+description = "Single-molecule VQE resource estimate"
+max_concurrency = 1
+default_timeout_secs = 30
+
+[pipeline.output]
+stage = "resources"
+field = "resources"
+artifact_key = "qchem_resources_{run_id}"
+
+[[stage]]
+id = "resources"
+type = "http_post"
+depends_on = []
+params = { path = "/qchem/resources", basis = "sto-3g", mapping = "jw", ansatz = "uccsd" }

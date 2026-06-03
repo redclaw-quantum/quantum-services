@@ -1,0 +1,34 @@
+# atom-gate-only.toml — Single-stage pipeline that calls /qatom/gate.
+#
+# Exists primarily as the inner template for atom-gate-bayesian.toml: the
+# Bayesian outer loop injects (distance, n_rydberg) as pipeline-level
+# params per iteration, the stage picks them up, and the resulting
+# `gate.fidelity` is exposed as the pipeline output.
+#
+# Stage params deliberately omit `distance` and `n_rydberg` — the
+# executor's `build_stage_input` overrides pipeline params with stage
+# params, so leaving them out lets the Bayesian-injected pipeline params
+# flow through. The `/qatom/gate` endpoint defaults distance=5.0 and
+# n_rydberg=60 if neither is provided, so standalone runs still work.
+#
+# Usage standalone:
+#   qorchestrate run --template atom-gate-only --templates-dir ... \
+#       --param species=rb87 --param distance=4.5 --param n_rydberg=65
+
+[pipeline]
+name = "atom-gate-only"
+version = "1.0"
+description = "One-shot neutral-atom CZ gate fidelity calculation"
+max_concurrency = 1
+default_timeout_secs = 30
+
+[pipeline.output]
+stage = "gate"
+field = "gate"
+artifact_key = "atom_gate_{run_id}"
+
+[[stage]]
+id = "gate"
+type = "http_post"
+depends_on = []
+params = { path = "/qatom/gate", species = "rb87" }

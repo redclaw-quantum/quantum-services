@@ -1,0 +1,47 @@
+# spin-platform-sweep.toml — Batch silicon-spin design across all 4 fab
+# platforms to compare yields side by side.
+#
+# Pipeline shape:
+#   BatchStage  (inner = spin-design, batch_over = "platforms")
+#     for each platform in [sige, simos, fdsoi, finfet]:
+#       run spin-design with that platform injected as a pipeline param
+#
+# Each inner run produces a yield_est result; BatchStage gathers them all
+# into `{ "results": [...], "count": N }`. The outer `pipeline.output`
+# returns the full Batch result so a single `qorchestrate result` call
+# shows yields for every platform.
+#
+# Typical runtime: ~25 s (4 spin-design runs in parallel, dominated by
+# each one's 10k-sample Monte Carlo).
+#
+# Usage:
+#   qorchestrate run --template spin-platform-sweep --templates-dir ...
+
+[pipeline]
+name = "spin-platform-sweep"
+version = "1.0"
+description = "Batch yield comparison of silicon-spin design across 4 fab platforms"
+max_concurrency = 1
+default_timeout_secs = 600
+
+[pipeline.output]
+stage = "sweep"
+field = "results"
+artifact_key = "spin_platform_sweep_{run_id}"
+
+[[stage]]
+id = "sweep"
+type = "batch"
+depends_on = []
+timeout_secs = 600
+
+[stage.params]
+inner_template = "spin-design"
+batch_over = "platforms"
+max_concurrency = 4
+platforms = [
+    { platform = "sige" },
+    { platform = "simos" },
+    { platform = "fdsoi" },
+    { platform = "finfet" },
+]

@@ -1,0 +1,23 @@
+[package]
+name = "quantum-jobs"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "quantum-jobs"
+path = "src/main.rs"
+
+[dependencies]
+axum = { version = "0.7", features = ["json"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+anyhow = "1"
+uuid = { version = "1", features = ["v4"] }
+tracing = "0.1"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+reqwest = { version = "0.12", features = ["json"] }
+chrono = { version = "0.4", features = ["serde"] }
+dashmap = "5"
+qservices-common = { workspace = true }
