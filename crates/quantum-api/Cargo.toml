@@ -18,9 +18,9 @@ anyhow = "1"
 tracing = "0.1"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 reqwest = { version = "0.12", features = ["json"] }
-claw-mesh = { path = "../../../quantum-mesh/crates/claw-mesh" }
-claw-gds  = { path = "../../../quantum-mesh/crates/claw-gds" }
-claw-tet  = { path = "../../../quantum-mesh/crates/claw-tet" }
+claw-mesh = { path = "../../../mesh/crates/claw-mesh" }
+claw-gds  = { path = "../../../mesh/crates/claw-gds" }
+claw-tet  = { path = "../../../mesh/crates/claw-tet" }
 qservices-common = { workspace = true }
 
 [dev-dependencies]

@@ -2,7 +2,7 @@
 //!
 //! Extracted from the duplicated patterns in `quantum-api`, `quantum-jobs`,
 //! and `qorchestrate-cli` per the §4.8 follow-up of
-//! `/home/osobh/projects/quantum-consolidation-audit.md`.
+//! `/home/osobh/qclaw/quantum-consolidation-audit.md`.
 //!
 //! What's here:
 //! - [`tracing::init`] — standard `tracing_subscriber::fmt()` boot, parameterised

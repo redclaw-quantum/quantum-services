@@ -14,7 +14,7 @@
 # place to track the shared HTTP/tracing/error-envelope dep stack. The
 # deployment topology is unchanged.
 #
-# Merged per /home/osobh/projects/quantum-consolidation-audit.md §4.8.
+# Merged per /home/osobh/qclaw/quantum-consolidation-audit.md §4.8.
 
 [workspace]
 resolver = "3"
