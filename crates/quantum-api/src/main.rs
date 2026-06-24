@@ -106,6 +106,7 @@ use claw_gds::{
     build_rectangular_cavity_3d_pcell,
     chip::{ChipConfig, build_chip_layout},
     gds_writer::write_gds,
+    drc::{check_drc, DrcConfig},
 };
 use claw_gds::pcell::PCell;
 use claw_tet::traits::ClawTetMesh;
@@ -4574,7 +4575,10 @@ async fn gds_rectangular_cavity_3d(Json(req): Json<Value>) -> ApiResult<Json<Val
     Ok(Json(pcell_to_json(&cell)))
 }
 
-async fn gds_chip_layout(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+/// Build a `ChipConfig` from a loose JSON request body. Shared by the
+/// chip-layout, chip GDS export, and DRC handlers so they all interpret the
+/// same `{cols, rows, pitch_x, pitch_y, qubit_params}` shape identically.
+fn chip_config_from_value(req: &Value) -> ChipConfig {
     let mut config = ChipConfig::default();
     if let Some(cols) = req.get("cols").and_then(as_u64_loose) { config.cols = cols as usize; }
     if let Some(rows) = req.get("rows").and_then(as_u64_loose) { config.rows = rows as usize; }
@@ -4583,6 +4587,11 @@ async fn gds_chip_layout(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
     if let Some(qp) = req.get("qubit_params") && let Ok(p) = serde_json::from_value::<TransmonCrossParams>(qp.clone()) {
         config.qubit_params = p;
     }
+    config
+}
+
+async fn gds_chip_layout(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    let config = chip_config_from_value(&req);
     let layout = build_chip_layout(&config);
     let cell_json = pcell_to_json(&layout.cell);
     Ok(Json(json!({
@@ -4590,6 +4599,53 @@ async fn gds_chip_layout(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
         "num_resonators": layout.num_resonators,
         "num_bus_couplers": layout.num_bus_couplers,
         "layout": cell_json,
+    })))
+}
+
+/// Generate a full multi-qubit chip layout and export it as GDS-II bytes
+/// (hex-encoded). This is the chip-level analogue of `/gds/export`, which only
+/// exports a single transmon. Used by the orchestration `gds_generate` stage to
+/// produce a fabrication-ready artifact for the whole design.
+async fn gds_export_chip(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    let config = chip_config_from_value(&req);
+    let layout = build_chip_layout(&config);
+    let tmp = NamedTempFile::new().context("tempfile")?;
+    let path = tmp.path().with_extension("gds");
+    write_gds(&path, "quantum_api_chip", &[&layout.cell])
+        .map_err(|e| anyhow::anyhow!("GDS write: {e}"))?;
+    let bytes = std::fs::read(&path).context("read GDS")?;
+    let hex = bytes.iter().fold(String::new(), |mut s, b| {
+        s.push_str(&format!("{b:02x}"));
+        s
+    });
+    Ok(Json(json!({
+        "format": "gds2",
+        "lib_name": "quantum_api_chip",
+        "n_bytes": bytes.len(),
+        "hex": hex,
+        "num_qubits": layout.num_qubits,
+        "num_resonators": layout.num_resonators,
+        "num_bus_couplers": layout.num_bus_couplers,
+    })))
+}
+
+/// Run a design-rule check over a generated chip layout. The request body is
+/// the same `{cols, rows, pitch_x, pitch_y, qubit_params}` chip-layout shape so
+/// the layout is rebuilt deterministically and checked with the default rule
+/// set. Returns the full violation list plus a `clean` flag.
+async fn gds_drc(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    let config = chip_config_from_value(&req);
+    let layout = build_chip_layout(&config);
+    let violations = check_drc(&layout.cell, &DrcConfig::default());
+    let violations_json: Vec<Value> = violations.iter().map(|v| json!({
+        "rule": format!("{:?}", v.rule),
+        "message": v.message,
+        "location": v.location,
+    })).collect();
+    Ok(Json(json!({
+        "clean": violations.is_empty(),
+        "num_violations": violations.len(),
+        "violations": violations_json,
     })))
 }
 
@@ -5490,6 +5546,8 @@ fn build_router() -> Router {
         .route("/gds/rectangular-cavity-3d", post(gds_rectangular_cavity_3d))
         .route("/gds/chip-layout", post(gds_chip_layout))
         .route("/gds/export", post(gds_export))
+        .route("/gds/export-chip", post(gds_export_chip))
+        .route("/drc", post(gds_drc))
         // clawview proxy (Phase 7Y)
         .route("/clawview/health", get(clawview_health))
         .route("/clawview/participation", get(clawview_participation))

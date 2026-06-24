@@ -2,6 +2,7 @@ pub mod advanced;
 pub mod bench;
 pub mod chip;
 pub mod explore;
+pub mod fabrication;
 pub mod meta;
 pub mod oqfp;
 pub mod physics;
@@ -106,6 +107,14 @@ pub fn register_standard_stages(registry: &mut StageRegistry) {
     registry.register(
         StageType::OqfpValidate,
         Arc::new(oqfp::validate::OqfpValidateStage::new()),
+    );
+    registry.register(
+        StageType::GdsGenerate,
+        Arc::new(fabrication::gds_generate::GdsGenerateStage::new()),
+    );
+    registry.register(
+        StageType::DrcCheck,
+        Arc::new(fabrication::drc_check::DrcCheckStage::new()),
     );
     registry.register(
         StageType::Skip,
@@ -236,6 +245,8 @@ mod tests {
         assert!(registry.has(&StageType::XtalkAnalyze));
         assert!(registry.has(&StageType::OqfpBuild));
         assert!(registry.has(&StageType::OqfpValidate));
+        assert!(registry.has(&StageType::GdsGenerate));
+        assert!(registry.has(&StageType::DrcCheck));
         assert!(registry.has(&StageType::Skip));
         assert!(registry.has(&StageType::QpudidpRmflow));
         assert!(registry.has(&StageType::QpudidpCmaes));
@@ -342,6 +353,38 @@ mod tests {
                 layer_name
             );
         }
+    }
+
+    // ── 2b. OqfpBuildStage populates fabrication layer from GDS + DRC ────────
+
+    #[tokio::test]
+    async fn test_oqfp_build_populates_fabrication_layer() {
+        let stage = oqfp::build::OqfpBuildStage::new();
+        let ctx = test_ctx();
+
+        let input = json!({
+            "freq_plan_output": { "yield_estimate": 0.77 },
+            "gds_generate_output": {
+                "lib_name": "quantum_api_chip",
+                "n_bytes": 12345,
+                "num_qubits": 9
+            },
+            "drc_check_output": { "clean": true, "num_violations": 0 }
+        });
+
+        let output = stage.execute_raw(input, &ctx).await.expect("build ok");
+        let fab = output
+            .get("oqfp_spec")
+            .and_then(|s| s.get("layers"))
+            .and_then(|l| l.get("fabrication"))
+            .expect("fabrication layer present");
+
+        assert_eq!(fab.get("gds_file"), Some(&json!("quantum_api_chip")));
+        assert_eq!(fab.get("gds_n_bytes"), Some(&json!(12345)));
+        assert_eq!(fab.get("num_qubits"), Some(&json!(9)));
+        assert_eq!(fab.get("drc_clean"), Some(&json!(true)));
+        assert_eq!(fab.get("drc_num_violations"), Some(&json!(0)));
+        assert!(fab.get("process_params").is_some(), "process_params present");
     }
 
     // ── 3. OqfpValidateStage accepts a well-formed spec ─────────────────────
@@ -662,6 +705,12 @@ mod tests {
         let s = twin::mock::TwinMockStage::new();
         assert_eq!(s.stage_type(), StageType::TwinMock);
 
+        // fabrication
+        let s = fabrication::gds_generate::GdsGenerateStage::new();
+        assert_eq!(s.stage_type(), StageType::GdsGenerate);
+        let s = fabrication::drc_check::DrcCheckStage::new();
+        assert_eq!(s.stage_type(), StageType::DrcCheck);
+
         // process
         let s = process::processes::QcircProcessesStage::new();
         assert_eq!(s.stage_type(), StageType::QcircProcesses);
@@ -840,6 +889,61 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[tokio::test]
+    async fn integration_gds_generate_execute_raw() {
+        let api_url = match integration_api_url() {
+            Some(u) => u,
+            None => return,
+        };
+        let stage = fabrication::gds_generate::GdsGenerateStage::new();
+        let ctx = integration_ctx(&api_url);
+        let input = serde_json::json!({
+            "freq_plan_output": {
+                "assignments": [{"qubit": 0}, {"qubit": 1}, {"qubit": 2}, {"qubit": 3}]
+            }
+        });
+        let output = stage
+            .execute_raw(input, &ctx)
+            .await
+            .expect("gds_generate should succeed against live API");
+        assert_eq!(output.get("format"), Some(&json!("gds2")));
+        assert!(
+            output.get("n_bytes").and_then(|v| v.as_u64()).unwrap_or(0) > 0,
+            "GDS output should be non-empty: {output}"
+        );
+        // chip_params must be echoed for drc_check to reuse.
+        assert!(
+            output.get("chip_params").and_then(|p| p.get("cols")).is_some(),
+            "chip_params.cols should be echoed: {output}"
+        );
+    }
+
+    #[tokio::test]
+    async fn integration_drc_check_execute_raw() {
+        let api_url = match integration_api_url() {
+            Some(u) => u,
+            None => return,
+        };
+        // First generate, then check the same layout (report-only).
+        let gen_stage = fabrication::gds_generate::GdsGenerateStage::new();
+        let drc = fabrication::drc_check::DrcCheckStage::new();
+        let ctx = integration_ctx(&api_url);
+        let gen_out = gen_stage
+            .execute_raw(
+                serde_json::json!({"freq_plan_output": {"assignments": [{"qubit": 0}, {"qubit": 1}]}}),
+                &ctx,
+            )
+            .await
+            .expect("gds_generate ok");
+        let drc_input = serde_json::json!({ "gds_generate_output": gen_out });
+        let report = drc
+            .execute_raw(drc_input, &ctx)
+            .await
+            .expect("drc_check (report-only) should not fail");
+        assert!(report.get("num_violations").is_some(), "report has num_violations: {report}");
+        assert!(report.get("clean").is_some(), "report has clean flag: {report}");
     }
 
     #[tokio::test]
