@@ -123,8 +123,10 @@ depends_on = ["scq_device", "freq_plan"]
 timeout_secs = 60
 
 # ── Stage 9c: Design-rule check over the generated layout ─────────────────────
-# Report-only by default (the default rule set flags intentionally-abutting
-# transmon gap polygons). Set params.fail_on_violations = true to gate the run.
+# Uses the layer-aware `coplanar_university` PDK deck (GAP is an etch layer, so
+# intentional abutment is not flagged). Report-only by default; set
+# params.fail_on_violations = true to gate the run on a clean layout. Available
+# decks: GET /drc/decks (default, coplanar_university, coplanar_foundry).
 
 [[stage]]
 id = "drc_check"
@@ -133,6 +135,7 @@ depends_on = ["gds_generate"]
 timeout_secs = 30
 
 [stage.params]
+pdk = "coplanar_university"
 fail_on_violations = false
 
 # ── Stage 10: Assemble 8-layer OQFP ──────────────────────────────────────────

@@ -83,7 +83,16 @@ impl Stage for DrcCheckStage {
     }
 
     async fn execute_raw(&self, input: Value, ctx: &StageContext) -> Result<Value, StageError> {
-        let chip_params = chip_params_for_drc(&input);
+        let mut chip_params = chip_params_for_drc(&input);
+        // Forward the selected foundry rule deck, if any, to /drc.
+        if let Some(deck) = input
+            .get("pdk")
+            .or_else(|| input.get("deck"))
+            .and_then(|v| v.as_str())
+            && let Some(obj) = chip_params.as_object_mut()
+        {
+            obj.insert("pdk".to_string(), json!(deck));
+        }
         let fail_on_violations = input
             .get("fail_on_violations")
             .and_then(|v| v.as_bool())
