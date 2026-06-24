@@ -4629,24 +4629,64 @@ async fn gds_export_chip(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
     })))
 }
 
+/// Serialize a DRC rule deck's per-layer rules for the `/drc/decks` endpoint.
+fn drc_config_to_json(config: &DrcConfig) -> Value {
+    let rules: Vec<Value> = config.layer_rules.iter().map(|r| json!({
+        "layer": r.layer.layer,
+        "datatype": r.layer.datatype,
+        "min_width_um": r.min_width,
+        "min_spacing_um": r.min_spacing,
+        "check_width": r.check_width,
+        "check_spacing": r.check_spacing,
+        "check_overlap": r.check_overlap,
+    })).collect();
+    json!({ "layer_rules": rules })
+}
+
 /// Run a design-rule check over a generated chip layout. The request body is
-/// the same `{cols, rows, pitch_x, pitch_y, qubit_params}` chip-layout shape so
-/// the layout is rebuilt deterministically and checked with the default rule
-/// set. Returns the full violation list plus a `clean` flag.
+/// the same `{cols, rows, pitch_x, pitch_y, qubit_params}` chip-layout shape,
+/// plus an optional `pdk` (alias `deck`) selecting a named foundry rule deck
+/// (default `"default"`). The layout is rebuilt deterministically and checked,
+/// returning the full violation list, a `clean` flag, and the deck used.
 async fn gds_drc(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
     let config = chip_config_from_value(&req);
     let layout = build_chip_layout(&config);
-    let violations = check_drc(&layout.cell, &DrcConfig::default());
+    let requested = req
+        .get("pdk")
+        .or_else(|| req.get("deck"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("default")
+        .to_string();
+    // Fall back to the default deck for an unknown name, but report which deck
+    // actually ran so the caller is never misled.
+    let (deck, drc_config) = match DrcConfig::deck(&requested) {
+        Some(c) => (requested, c),
+        None => ("default".to_string(), DrcConfig::default()),
+    };
+    let violations = check_drc(&layout.cell, &drc_config);
     let violations_json: Vec<Value> = violations.iter().map(|v| json!({
         "rule": format!("{:?}", v.rule),
         "message": v.message,
         "location": v.location,
     })).collect();
     Ok(Json(json!({
+        "deck": deck,
         "clean": violations.is_empty(),
         "num_violations": violations.len(),
         "violations": violations_json,
     })))
+}
+
+/// List the available named DRC rule decks and their per-layer rules.
+async fn gds_drc_decks() -> Json<Value> {
+    let decks: Vec<Value> = DrcConfig::deck_names().iter().filter_map(|name| {
+        DrcConfig::deck(name).map(|cfg| {
+            let mut d = drc_config_to_json(&cfg);
+            d["name"] = json!(name);
+            d
+        })
+    }).collect();
+    Json(json!({ "decks": decks }))
 }
 
 async fn gds_export(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
@@ -5548,6 +5588,7 @@ fn build_router() -> Router {
         .route("/gds/export", post(gds_export))
         .route("/gds/export-chip", post(gds_export_chip))
         .route("/drc", post(gds_drc))
+        .route("/drc/decks", get(gds_drc_decks))
         // clawview proxy (Phase 7Y)
         .route("/clawview/health", get(clawview_health))
         .route("/clawview/participation", get(clawview_participation))

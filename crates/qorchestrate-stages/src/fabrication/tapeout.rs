@@ -76,8 +76,15 @@ fn decode_hex(s: &str) -> Option<Vec<u8>> {
         .collect()
 }
 
-/// Resolve the base output directory for tape-out bundles.
-fn base_output_dir() -> PathBuf {
+/// Resolve the base output directory for tape-out bundles. Precedence:
+/// explicit `output_dir` in the stage input, then `$QORCH_OUTPUT_DIR`, then
+/// `<temp>/quantumclaw-tapeout`.
+fn base_output_dir(input: &Value) -> PathBuf {
+    if let Some(d) = input.get("output_dir").and_then(|v| v.as_str())
+        && !d.is_empty()
+    {
+        return PathBuf::from(d);
+    }
     match std::env::var("QORCH_OUTPUT_DIR") {
         Ok(d) if !d.is_empty() => PathBuf::from(d),
         _ => std::env::temp_dir().join("quantumclaw-tapeout"),
@@ -139,7 +146,7 @@ impl Stage for TapeoutPackageStage {
             .to_string();
 
         // Write the submission directory.
-        let dir = base_output_dir().join(ctx.pipeline_run_id.to_string());
+        let dir = base_output_dir(&input).join(ctx.pipeline_run_id.to_string());
         std::fs::create_dir_all(&dir)
             .map_err(|e| StageError::BackendError(format!("create submission dir: {e}")))?;
 
@@ -173,6 +180,7 @@ impl Stage for TapeoutPackageStage {
                 "drc_report.json": {
                     "n_bytes": drc_bytes.len(),
                     "sha256": sha256_hex(&drc_bytes),
+                    "deck": drc.get("deck").cloned().unwrap_or(Value::Null),
                     "clean": drc.get("clean").cloned().unwrap_or(Value::Null),
                     "num_violations": drc.get("num_violations").cloned().unwrap_or(Value::Null),
                 },
@@ -202,11 +210,7 @@ mod tests {
     use qorchestrate_core::stage::StageContext;
     use serde_json::json;
 
-    fn ctx_with_output_dir(dir: &std::path::Path) -> (StageContext, uuid::Uuid) {
-        // Safe in tests: setting an env var the stage reads.
-        unsafe {
-            std::env::set_var("QORCH_OUTPUT_DIR", dir);
-        }
+    fn test_ctx() -> (StageContext, uuid::Uuid) {
         let (tx, _) = tokio::sync::broadcast::channel(16);
         let run_id = uuid::Uuid::now_v7();
         let ctx = StageContext::new(
@@ -239,17 +243,18 @@ mod tests {
     #[tokio::test]
     async fn writes_full_submission_bundle() {
         let tmp = std::env::temp_dir().join(format!("tapeout-test-{}", uuid::Uuid::now_v7()));
-        let (ctx, run_id) = ctx_with_output_dir(&tmp);
+        let (ctx, run_id) = test_ctx();
 
         // "deadbeef" -> 4 bytes of GDS payload.
         let input = json!({
+            "output_dir": tmp.to_string_lossy(),
             "gds_generate_output": {
                 "hex": "deadbeef",
                 "num_qubits": 9,
                 "num_resonators": 9,
                 "num_bus_couplers": 12
             },
-            "drc_check_output": { "clean": false, "num_violations": 3274 },
+            "drc_check_output": { "clean": false, "num_violations": 3274, "deck": "coplanar_university" },
             "oqfp_build_output": { "oqfp_spec": { "oqfp_version": "1.0" } },
             "oqfp_validate_output": { "validated": true }
         });
@@ -276,6 +281,7 @@ mod tests {
         assert_eq!(man["chip"]["num_qubits"], json!(9));
         assert_eq!(man["files"]["oqfp_spec.json"]["validated"], json!(true));
         assert_eq!(man["files"]["drc_report.json"]["num_violations"], json!(3274));
+        assert_eq!(man["files"]["drc_report.json"]["deck"], json!("coplanar_university"));
         assert!(man["test_plan"].as_array().is_some_and(|a| !a.is_empty()));
 
         let _ = std::fs::remove_dir_all(&tmp);
@@ -283,12 +289,10 @@ mod tests {
 
     #[tokio::test]
     async fn errors_without_gds() {
-        let tmp = std::env::temp_dir().join(format!("tapeout-test-{}", uuid::Uuid::now_v7()));
-        let (ctx, _) = ctx_with_output_dir(&tmp);
+        let (ctx, _) = test_ctx();
         let result = TapeoutPackageStage::new()
             .execute_raw(json!({ "oqfp_build_output": {} }), &ctx)
             .await;
         assert!(matches!(result, Err(StageError::InvalidInput(_))));
-        let _ = std::fs::remove_dir_all(&tmp);
     }
 }
