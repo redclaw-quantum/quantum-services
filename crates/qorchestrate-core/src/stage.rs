@@ -99,6 +99,9 @@ pub enum StageType {
     /// Assemble the fabrication-handoff bundle (GDS-II + DRC report + validated
     /// OQFP spec + signed manifest) into a submission directory for a foundry.
     TapeoutPackage,
+    /// Evaluate the Josephson-junction process recipe → nominal I_c / E_J / L_J
+    /// + process parameters, for the OQFP device + fabrication layers.
+    ProcessRecipe,
     Clawhdf5Save,
     PipelineCall,
     Batch,

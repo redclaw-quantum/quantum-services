@@ -121,6 +121,10 @@ pub fn register_standard_stages(registry: &mut StageRegistry) {
         Arc::new(fabrication::tapeout::TapeoutPackageStage::new()),
     );
     registry.register(
+        StageType::ProcessRecipe,
+        Arc::new(fabrication::process_recipe::ProcessRecipeStage::new()),
+    );
+    registry.register(
         StageType::Skip,
         Arc::new(meta::skip::SkipStage::new()),
     );
@@ -252,6 +256,7 @@ mod tests {
         assert!(registry.has(&StageType::GdsGenerate));
         assert!(registry.has(&StageType::DrcCheck));
         assert!(registry.has(&StageType::TapeoutPackage));
+        assert!(registry.has(&StageType::ProcessRecipe));
         assert!(registry.has(&StageType::Skip));
         assert!(registry.has(&StageType::QpudidpRmflow));
         assert!(registry.has(&StageType::QpudidpCmaes));
@@ -390,6 +395,28 @@ mod tests {
         assert_eq!(fab.get("drc_clean"), Some(&json!(true)));
         assert_eq!(fab.get("drc_num_violations"), Some(&json!(0)));
         assert!(fab.get("process_params").is_some(), "process_params present");
+    }
+
+    // ── 2c. OqfpBuildStage populates device.junction from process_recipe ─────
+
+    #[tokio::test]
+    async fn test_oqfp_build_populates_junction() {
+        let stage = oqfp::build::OqfpBuildStage::new();
+        let ctx = test_ctx();
+        let input = json!({
+            "process_recipe_output": {
+                "recipe": { "name": "dolan_alox_standard" },
+                "eval": { "lj_nh": 12.8, "ic_ua": 0.0257, "area_um2": 0.03, "junction_sigma_percent": 4.55 }
+            }
+        });
+        let output = stage.execute_raw(input, &ctx).await.expect("build ok");
+        let layers = output.get("oqfp_spec").and_then(|s| s.get("layers")).unwrap();
+        let junction = layers.get("device").and_then(|d| d.get("junction")).expect("device.junction");
+        assert_eq!(junction.get("lj_nh"), Some(&json!(12.8)));
+        assert_eq!(junction.get("area_um2"), Some(&json!(0.03)));
+        let fab = layers.get("fabrication").unwrap();
+        assert_eq!(fab.get("junction_recipe"), Some(&json!("dolan_alox_standard")));
+        assert_eq!(fab.get("junction_sigma_percent"), Some(&json!(4.55)));
     }
 
     // ── 3. OqfpValidateStage accepts a well-formed spec ─────────────────────
@@ -717,6 +744,8 @@ mod tests {
         assert_eq!(s.stage_type(), StageType::DrcCheck);
         let s = fabrication::tapeout::TapeoutPackageStage::new();
         assert_eq!(s.stage_type(), StageType::TapeoutPackage);
+        let s = fabrication::process_recipe::ProcessRecipeStage::new();
+        assert_eq!(s.stage_type(), StageType::ProcessRecipe);
 
         // process
         let s = process::processes::QcircProcessesStage::new();
@@ -951,6 +980,28 @@ mod tests {
             .expect("drc_check (report-only) should not fail");
         assert!(report.get("num_violations").is_some(), "report has num_violations: {report}");
         assert!(report.get("clean").is_some(), "report has clean flag: {report}");
+    }
+
+    #[tokio::test]
+    async fn integration_process_recipe_execute_raw() {
+        let api_url = match integration_api_url() {
+            Some(u) => u,
+            None => return,
+        };
+        let stage = fabrication::process_recipe::ProcessRecipeStage::new();
+        let ctx = integration_ctx(&api_url);
+        // foundry profile supplies the recipe name
+        let out = stage
+            .execute_raw(json!({ "foundry": "commercial_foundry" }), &ctx)
+            .await
+            .expect("process_recipe ok");
+        let ej = out
+            .get("eval")
+            .and_then(|e| e.get("ej_ghz"))
+            .and_then(|v| v.as_f64())
+            .expect("eval.ej_ghz");
+        assert!(ej > 5.0 && ej < 40.0, "E_J should be in transmon band, got {ej}");
+        assert!(out.get("process_params").is_some(), "process_params present");
     }
 
     #[tokio::test]

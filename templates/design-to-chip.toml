@@ -114,6 +114,20 @@ type = "bench_predict"
 depends_on = ["qec_assess"]
 timeout_secs = 10
 
+# ── Stage 9a: Josephson-junction process recipe (nominal E_J/L_J + σ) ─────────
+# The foundry profile supplies the junction recipe; GPU-accelerated yield and
+# tolerance-budget endpoints (/junction/yield, /junction/budget) are available
+# for deeper analysis. Discover recipes: GET /junction/recipes.
+
+[[stage]]
+id = "process_recipe"
+type = "process_recipe"
+depends_on = []
+timeout_secs = 15
+
+[stage.params]
+foundry = "university_snf"
+
 # ── Stage 9b: Generate fabrication-ready GDS-II chip layout ───────────────────
 
 [[stage]]
@@ -144,7 +158,7 @@ foundry = "university_snf"
 [[stage]]
 id = "oqfp_build"
 type = "oqfp_build"
-depends_on = ["bench_predict", "freq_plan", "xtalk_analyze", "readout_design", "qec_assess", "gds_generate", "drc_check"]
+depends_on = ["bench_predict", "freq_plan", "xtalk_analyze", "readout_design", "qec_assess", "gds_generate", "drc_check", "process_recipe"]
 timeout_secs = 10
 
 # ── Stage 11: Validate OQFP layer completeness ───────────────────────────────
@@ -162,7 +176,7 @@ timeout_secs = 5
 [[stage]]
 id = "tapeout_package"
 type = "tapeout_package"
-depends_on = ["gds_generate", "drc_check", "oqfp_build", "oqfp_validate"]
+depends_on = ["gds_generate", "drc_check", "oqfp_build", "oqfp_validate", "process_recipe"]
 timeout_secs = 30
 
 [stage.params]

@@ -110,6 +110,10 @@ use claw_gds::{
 };
 use claw_gds::pcell::PCell;
 use claw_tet::traits::ClawTetMesh;
+use claw_yield::recipe::{
+    recipe as jj_recipe, recipe_names as jj_recipe_names, tolerance_budget_with, JunctionRecipe,
+};
+use claw_yield::types::{NominalDesign, ProcessParams};
 
 /// Directory containing chip design spec files.
 const CHIP_DESIGNS_DIR: &str = "/nvme/quantum/data/designs";
@@ -4695,6 +4699,112 @@ async fn foundry_profiles() -> Json<Value> {
     Json(qservices_common::foundry::all_profiles_json())
 }
 
+// ---------------------------------------------------------------------------
+// Josephson-junction process/recipe model (claw-yield)
+// ---------------------------------------------------------------------------
+
+/// Resolve a `JunctionRecipe` from a request body: either `{"recipe":"<name>"}`
+/// (named) or an inline recipe object.
+fn junction_recipe_from_value(req: &Value) -> anyhow::Result<JunctionRecipe> {
+    if let Some(name) = req.get("recipe").and_then(|v| v.as_str()) {
+        jj_recipe(name).ok_or_else(|| anyhow::anyhow!("unknown junction recipe '{name}'"))
+    } else {
+        serde_json::from_value(req.clone()).map_err(|e| anyhow::anyhow!("invalid recipe: {e}"))
+    }
+}
+
+fn recipe_json(r: &JunctionRecipe) -> Value {
+    json!({
+        "recipe": serde_json::to_value(r).unwrap_or(Value::Null),
+        "eval": serde_json::to_value(r.evaluate()).unwrap_or(Value::Null),
+        "process_params": serde_json::to_value(r.to_process_params()).unwrap_or(Value::Null),
+    })
+}
+
+/// List the built-in junction recipes with their evaluated nominal (E_J/L_J/I_c)
+/// and derived process parameters.
+async fn junction_recipes() -> Json<Value> {
+    let recipes: Vec<Value> = jj_recipe_names()
+        .iter()
+        .filter_map(|n| jj_recipe(n))
+        .map(|r| recipe_json(&r))
+        .collect();
+    Json(json!({ "recipes": recipes }))
+}
+
+/// Evaluate a junction recipe → nominal I_c / E_J / L_J + ProcessParams.
+async fn junction_recipe_eval(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    let r = junction_recipe_from_value(&req)?;
+    Ok(Json(recipe_json(&r)))
+}
+
+fn design_from_req(req: &Value) -> anyhow::Result<NominalDesign> {
+    let d = req
+        .get("design")
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("missing 'design'"))?;
+    serde_json::from_value(d).map_err(|e| anyhow::anyhow!("invalid design: {e}"))
+}
+
+/// Monte-Carlo yield for a design under a recipe (or explicit ProcessParams),
+/// GPU-accelerated when available. Returns the backend that ran it.
+async fn junction_yield(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    let design = design_from_req(&req)?;
+    let samples = req.get("samples").and_then(as_u64_loose).unwrap_or(50_000) as usize;
+    let threshold = req
+        .get("collision_threshold_mhz")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(40.0);
+    let process: ProcessParams = if req.get("recipe").is_some() {
+        junction_recipe_from_value(&req)?.to_process_params()
+    } else {
+        serde_json::from_value(
+            req.get("process")
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("missing 'process' or 'recipe'"))?,
+        )
+        .map_err(|e| anyhow::anyhow!("invalid process: {e}"))?
+    };
+    let a = claw_yield_gpu::monte_carlo_yield_auto(&design, &process, samples, threshold);
+    Ok(Json(json!({
+        "backend": a.backend,
+        "yield": serde_json::to_value(&a.result).unwrap_or(Value::Null),
+    })))
+}
+
+/// Reverse tolerance budget: largest junction σ(%) meeting a target yield, with
+/// the dominant variance contributor. GPU-accelerated MC when available.
+async fn junction_budget(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    let design = design_from_req(&req)?;
+    let recipe = junction_recipe_from_value(&req)?;
+    let target = req.get("target_yield").and_then(|v| v.as_f64()).unwrap_or(0.9);
+    let samples = req.get("samples").and_then(as_u64_loose).unwrap_or(50_000) as usize;
+    let threshold = req
+        .get("collision_threshold_mhz")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(40.0);
+
+    let backend = std::cell::Cell::new("cpu");
+    let budget = tolerance_budget_with(
+        &design,
+        &recipe,
+        target,
+        samples,
+        threshold,
+        |d, p, s, t| {
+            let a = claw_yield_gpu::monte_carlo_yield_auto(d, p, s, t);
+            backend.set(a.backend);
+            a.result
+        },
+    );
+    Ok(Json(json!({
+        "backend": backend.get(),
+        "budget": serde_json::to_value(&budget).unwrap_or(Value::Null),
+        "recipe": serde_json::to_value(&recipe).unwrap_or(Value::Null),
+        "eval": serde_json::to_value(recipe.evaluate()).unwrap_or(Value::Null),
+    })))
+}
+
 async fn gds_export(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
     let params: TransmonCrossParams = serde_json::from_value(
         req.get("params").cloned().unwrap_or_default()
@@ -5596,6 +5706,10 @@ fn build_router() -> Router {
         .route("/drc", post(gds_drc))
         .route("/drc/decks", get(gds_drc_decks))
         .route("/foundry/profiles", get(foundry_profiles))
+        .route("/junction/recipes", get(junction_recipes))
+        .route("/junction/recipe", post(junction_recipe_eval))
+        .route("/junction/yield", post(junction_yield))
+        .route("/junction/budget", post(junction_budget))
         // clawview proxy (Phase 7Y)
         .route("/clawview/health", get(clawview_health))
         .route("/clawview/participation", get(clawview_participation))

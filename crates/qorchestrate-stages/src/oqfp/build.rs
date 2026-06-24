@@ -71,6 +71,11 @@ impl Stage for OqfpBuildStage {
             .get("drc_check_output")
             .cloned()
             .unwrap_or(Value::Null);
+        let recipe_out = input
+            .get("process_recipe_output")
+            .cloned()
+            .unwrap_or(Value::Null);
+        let jeval = recipe_out.get("eval").cloned().unwrap_or(Value::Null);
 
         let oqfp = json!({
             "oqfp_version": "1.0",
@@ -78,6 +83,11 @@ impl Stage for OqfpBuildStage {
                 "device": {
                     "geometry": inverse.get("best_candidate").and_then(|c| c.get("geometry")).cloned().unwrap_or(Value::Null),
                     "scq_params": scq,
+                    "junction": {
+                        "lj_nh": jeval.get("lj_nh").cloned().unwrap_or(Value::Null),
+                        "ic_ua": jeval.get("ic_ua").cloned().unwrap_or(Value::Null),
+                        "area_um2": jeval.get("area_um2").cloned().unwrap_or(Value::Null),
+                    },
                 },
                 "connectivity": {
                     "edges": xtalk.get("coupling").and_then(|c| c.get("coupling_matrix_mhz")).cloned().unwrap_or(json!([])),
@@ -101,6 +111,8 @@ impl Stage for OqfpBuildStage {
                     "process_params": {
                         "fab_process": input.get("fab_process").cloned().unwrap_or(json!("AlOx_0.5um")),
                     },
+                    "junction_recipe": recipe_out.get("recipe").and_then(|r| r.get("name")).cloned().unwrap_or(Value::Null),
+                    "junction_sigma_percent": jeval.get("junction_sigma_percent").cloned().unwrap_or(Value::Null),
                     "gds_file": gds.get("lib_name").cloned().unwrap_or(Value::Null),
                     "gds_n_bytes": gds.get("n_bytes").cloned().unwrap_or(Value::Null),
                     "num_qubits": gds.get("num_qubits").cloned().unwrap_or(Value::Null),
