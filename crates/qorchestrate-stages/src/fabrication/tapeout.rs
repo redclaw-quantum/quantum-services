@@ -139,11 +139,22 @@ impl Stage for TapeoutPackageStage {
         let gds_bytes = decode_hex(gds_hex)
             .ok_or_else(|| StageError::InvalidInput("gds hex is not valid hex".to_string()))?;
 
+        // An optional foundry profile supplies the process string and test
+        // plan; an explicit fab_process still wins.
+        let foundry = input
+            .get("foundry")
+            .and_then(|v| v.as_str())
+            .and_then(qservices_common::foundry::profile);
         let fab_process = input
             .get("fab_process")
             .and_then(|v| v.as_str())
-            .unwrap_or("AlOx_0.5um")
-            .to_string();
+            .map(str::to_string)
+            .or_else(|| foundry.map(|f| f.fab_process.to_string()))
+            .unwrap_or_else(|| "AlOx_0.5um".to_string());
+        let test_plan = match foundry {
+            Some(f) => json!(f.test_plan),
+            None => default_test_plan(),
+        };
 
         // Write the submission directory.
         let dir = base_output_dir(&input).join(ctx.pipeline_run_id.to_string());
@@ -165,7 +176,9 @@ impl Stage for TapeoutPackageStage {
             "package_format_version": "1.0",
             "run_id": ctx.pipeline_run_id.to_string(),
             "created_utc": chrono::Utc::now().to_rfc3339(),
+            "foundry": foundry.map(|f| f.name).unwrap_or("none"),
             "fab_process": fab_process,
+            "min_feature_nm": foundry.map(|f| f.min_feature_nm),
             "chip": {
                 "num_qubits": gds.get("num_qubits").cloned().unwrap_or(Value::Null),
                 "num_resonators": gds.get("num_resonators").cloned().unwrap_or(Value::Null),
@@ -190,7 +203,7 @@ impl Stage for TapeoutPackageStage {
                     "validated": validated,
                 },
             },
-            "test_plan": default_test_plan(),
+            "test_plan": test_plan,
         });
 
         let manifest_bytes = serde_json::to_vec_pretty(&manifest)?;
@@ -284,6 +297,33 @@ mod tests {
         assert_eq!(man["files"]["drc_report.json"]["deck"], json!("coplanar_university"));
         assert!(man["test_plan"].as_array().is_some_and(|a| !a.is_empty()));
 
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[tokio::test]
+    async fn applies_foundry_profile() {
+        let tmp = std::env::temp_dir().join(format!("tapeout-test-{}", uuid::Uuid::now_v7()));
+        let (ctx, _) = test_ctx();
+        let input = json!({
+            "output_dir": tmp.to_string_lossy(),
+            "foundry": "commercial_foundry",
+            "gds_generate_output": { "hex": "deadbeef", "num_qubits": 4 },
+            "drc_check_output": { "clean": true, "num_violations": 0, "deck": "coplanar_foundry" },
+            "oqfp_build_output": { "oqfp_spec": {} },
+            "oqfp_validate_output": { "validated": true }
+        });
+        let out = TapeoutPackageStage::new()
+            .execute_raw(input, &ctx)
+            .await
+            .expect("tapeout ok");
+        let man = &out["manifest"];
+        // Profile drives process string, min feature, and test plan.
+        assert_eq!(man["foundry"], json!("commercial_foundry"));
+        assert_eq!(man["fab_process"], json!("AlOx_0.25um"));
+        assert_eq!(man["min_feature_nm"], json!(250.0));
+        let plan = man["test_plan"].as_array().expect("test_plan array");
+        assert!(plan.iter().any(|s| s == "junction_resistance_map"),
+            "commercial_foundry test plan should include foundry-specific steps");
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
