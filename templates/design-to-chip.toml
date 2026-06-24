@@ -136,6 +136,12 @@ type = "gds_generate"
 depends_on = ["scq_device", "freq_plan"]
 timeout_secs = 60
 
+# The foundry profile selects the tape-out layer map (mask layer assignments);
+# the generated GDS is foundry-mapped and the mask table is recorded in the
+# tape-out manifest. Discover maps: GET /tapeout/layermaps.
+[stage.params]
+foundry = "university_snf"
+
 # ── Stage 9c: Design-rule check over the generated layout ─────────────────────
 # The `university_snf` foundry profile selects the layer-aware
 # `coplanar_university` PDK deck (GAP is an etch layer, so intentional abutment

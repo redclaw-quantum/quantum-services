@@ -68,6 +68,22 @@ fn chip_params_from_input(input: &Value) -> Value {
             obj.insert(key.to_string(), v.clone());
         }
     }
+
+    // Tape-out layer map: explicit `layer_map` wins, else the foundry profile's.
+    let layer_map = input
+        .get("layer_map")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .or_else(|| {
+            input
+                .get("foundry")
+                .and_then(|v| v.as_str())
+                .and_then(qservices_common::foundry::profile)
+                .map(|p| p.layer_map.to_string())
+        });
+    if let Some(lm) = layer_map {
+        obj.insert("layer_map".to_string(), json!(lm));
+    }
     params
 }
 
