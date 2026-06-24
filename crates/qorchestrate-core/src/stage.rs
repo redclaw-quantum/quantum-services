@@ -88,6 +88,14 @@ pub enum StageType {
     SurgeryResources,
     OqfpBuild,
     OqfpValidate,
+    // ── Fabrication handoff (claw-gds via quantum-api) ─────────────────────
+    /// Generate a GDS-II chip layout from upstream device + frequency-plan
+    /// output by calling the quantum-api `/gds/*` endpoints. Emits the layout
+    /// bytes (hex) plus metadata as an artifact for tape-out.
+    GdsGenerate,
+    /// Run a design-rule check over the generated GDS layout. Fails the stage
+    /// when violations are found so a non-manufacturable layout blocks the run.
+    DrcCheck,
     Clawhdf5Save,
     PipelineCall,
     Batch,

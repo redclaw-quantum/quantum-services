@@ -114,12 +114,33 @@ type = "bench_predict"
 depends_on = ["qec_assess"]
 timeout_secs = 10
 
+# ── Stage 9b: Generate fabrication-ready GDS-II chip layout ───────────────────
+
+[[stage]]
+id = "gds_generate"
+type = "gds_generate"
+depends_on = ["scq_device", "freq_plan"]
+timeout_secs = 60
+
+# ── Stage 9c: Design-rule check over the generated layout ─────────────────────
+# Report-only by default (the default rule set flags intentionally-abutting
+# transmon gap polygons). Set params.fail_on_violations = true to gate the run.
+
+[[stage]]
+id = "drc_check"
+type = "drc_check"
+depends_on = ["gds_generate"]
+timeout_secs = 30
+
+[stage.params]
+fail_on_violations = false
+
 # ── Stage 10: Assemble 8-layer OQFP ──────────────────────────────────────────
 
 [[stage]]
 id = "oqfp_build"
 type = "oqfp_build"
-depends_on = ["bench_predict", "freq_plan", "xtalk_analyze", "readout_design", "qec_assess"]
+depends_on = ["bench_predict", "freq_plan", "xtalk_analyze", "readout_design", "qec_assess", "gds_generate", "drc_check"]
 timeout_secs = 10
 
 # ── Stage 11: Validate OQFP layer completeness ───────────────────────────────

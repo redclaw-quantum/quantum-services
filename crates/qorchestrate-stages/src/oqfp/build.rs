@@ -63,6 +63,14 @@ impl Stage for OqfpBuildStage {
             .get("scq_device_output")
             .cloned()
             .unwrap_or(Value::Null);
+        let gds = input
+            .get("gds_generate_output")
+            .cloned()
+            .unwrap_or(Value::Null);
+        let drc = input
+            .get("drc_check_output")
+            .cloned()
+            .unwrap_or(Value::Null);
 
         let oqfp = json!({
             "oqfp_version": "1.0",
@@ -90,6 +98,14 @@ impl Stage for OqfpBuildStage {
                 },
                 "fabrication": {
                     "yield_estimate": freq_plan.get("yield_estimate").cloned().unwrap_or(json!(0.0)),
+                    "process_params": {
+                        "fab_process": input.get("fab_process").cloned().unwrap_or(json!("AlOx_0.5um")),
+                    },
+                    "gds_file": gds.get("lib_name").cloned().unwrap_or(Value::Null),
+                    "gds_n_bytes": gds.get("n_bytes").cloned().unwrap_or(Value::Null),
+                    "num_qubits": gds.get("num_qubits").cloned().unwrap_or(Value::Null),
+                    "drc_clean": drc.get("clean").cloned().unwrap_or(Value::Null),
+                    "drc_num_violations": drc.get("num_violations").cloned().unwrap_or(Value::Null),
                 },
                 "performance": {
                     "quantum_volume": bench.get("quantum_volume").cloned().unwrap_or(Value::Null),
