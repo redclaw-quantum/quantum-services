@@ -123,10 +123,12 @@ depends_on = ["scq_device", "freq_plan"]
 timeout_secs = 60
 
 # ── Stage 9c: Design-rule check over the generated layout ─────────────────────
-# Uses the layer-aware `coplanar_university` PDK deck (GAP is an etch layer, so
-# intentional abutment is not flagged). Report-only by default; set
-# params.fail_on_violations = true to gate the run on a clean layout. Available
-# decks: GET /drc/decks (default, coplanar_university, coplanar_foundry).
+# The `university_snf` foundry profile selects the layer-aware
+# `coplanar_university` PDK deck (GAP is an etch layer, so intentional abutment
+# is not flagged) and is report-only (gate_on_drc = false). Switch to
+# `commercial_foundry` to use the tighter, DRC-gated profile. An explicit `pdk`
+# or `fail_on_violations` stage param overrides the profile.
+# Discover: GET /foundry/profiles and GET /drc/decks.
 
 [[stage]]
 id = "drc_check"
@@ -135,8 +137,7 @@ depends_on = ["gds_generate"]
 timeout_secs = 30
 
 [stage.params]
-pdk = "coplanar_university"
-fail_on_violations = false
+foundry = "university_snf"
 
 # ── Stage 10: Assemble 8-layer OQFP ──────────────────────────────────────────
 
@@ -163,3 +164,6 @@ id = "tapeout_package"
 type = "tapeout_package"
 depends_on = ["gds_generate", "drc_check", "oqfp_build", "oqfp_validate"]
 timeout_secs = 30
+
+[stage.params]
+foundry = "university_snf"

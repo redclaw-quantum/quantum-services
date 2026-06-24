@@ -23,6 +23,7 @@
 //!   needs to diverge from "permissive" or vary per service.
 
 pub mod error;
+pub mod foundry;
 pub mod tracing;
 
 pub use error::{ApiError, ApiResult};

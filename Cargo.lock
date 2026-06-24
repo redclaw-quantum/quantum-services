@@ -1837,6 +1837,7 @@ dependencies = [
  "nalgebra",
  "qorchestrate-core",
  "qorchestrate-executor",
+ "qservices-common",
  "reqwest",
  "serde",
  "serde_json",

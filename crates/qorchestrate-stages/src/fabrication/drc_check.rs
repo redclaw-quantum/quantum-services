@@ -84,19 +84,31 @@ impl Stage for DrcCheckStage {
 
     async fn execute_raw(&self, input: Value, ctx: &StageContext) -> Result<Value, StageError> {
         let mut chip_params = chip_params_for_drc(&input);
-        // Forward the selected foundry rule deck, if any, to /drc.
-        if let Some(deck) = input
+
+        // A foundry profile supplies deck + gating defaults; explicit params win.
+        let foundry = input
+            .get("foundry")
+            .and_then(|v| v.as_str())
+            .and_then(qservices_common::foundry::profile);
+
+        // Deck precedence: explicit pdk/deck > foundry profile deck.
+        let deck = input
             .get("pdk")
             .or_else(|| input.get("deck"))
             .and_then(|v| v.as_str())
+            .map(str::to_string)
+            .or_else(|| foundry.map(|f| f.pdk_deck.to_string()));
+        if let Some(deck) = &deck
             && let Some(obj) = chip_params.as_object_mut()
         {
             obj.insert("pdk".to_string(), json!(deck));
         }
+
+        // Gating precedence: explicit fail_on_violations > profile gate_on_drc > false.
         let fail_on_violations = input
             .get("fail_on_violations")
             .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+            .unwrap_or_else(|| foundry.map(|f| f.gate_on_drc).unwrap_or(false));
 
         let resp = self
             .client

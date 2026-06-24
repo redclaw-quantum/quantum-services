@@ -4689,6 +4689,12 @@ async fn gds_drc_decks() -> Json<Value> {
     Json(json!({ "decks": decks }))
 }
 
+/// List the available foundry submission profiles (PDK deck + process + test
+/// plan + DRC gating) used by the tape-out package assembler.
+async fn foundry_profiles() -> Json<Value> {
+    Json(qservices_common::foundry::all_profiles_json())
+}
+
 async fn gds_export(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
     let params: TransmonCrossParams = serde_json::from_value(
         req.get("params").cloned().unwrap_or_default()
@@ -5589,6 +5595,7 @@ fn build_router() -> Router {
         .route("/gds/export-chip", post(gds_export_chip))
         .route("/drc", post(gds_drc))
         .route("/drc/decks", get(gds_drc_decks))
+        .route("/foundry/profiles", get(foundry_profiles))
         // clawview proxy (Phase 7Y)
         .route("/clawview/health", get(clawview_health))
         .route("/clawview/participation", get(clawview_participation))
