@@ -8,6 +8,16 @@ rust-version = "1.95"
 name = "quantum-api"
 path = "src/main.rs"
 
+[features]
+# GPU backend for claw-yield-gpu (junction yield/budget Monte Carlo). Default is
+# CUDA (this node has the toolkit) — needs nvcc/nvrtc on PATH at build/run.
+# Build toolkit-less environments with `--no-default-features --features gpu-wgpu`
+# (Vulkan) or `gpu-cpu` (software).
+default = ["gpu-cuda"]
+gpu-cuda = ["claw-yield-gpu/cuda"]
+gpu-wgpu = ["claw-yield-gpu/wgpu"]
+gpu-cpu = ["claw-yield-gpu/cpu"]
+
 [dependencies]
 axum = { version = "0.7", features = ["json"] }
 tokio = { version = "1", features = ["full"] }
@@ -22,7 +32,7 @@ claw-mesh = { path = "../../../mesh/crates/claw-mesh" }
 claw-gds  = { path = "../../../mesh/crates/claw-gds" }
 claw-tet  = { path = "../../../mesh/crates/claw-tet" }
 claw-yield = { path = "../../../mesh/crates/claw-yield" }
-claw-yield-gpu = { path = "../../../mesh/crates/claw-yield-gpu" }
+claw-yield-gpu = { path = "../../../mesh/crates/claw-yield-gpu", default-features = false }
 qservices-common = { workspace = true }
 
 [dev-dependencies]
