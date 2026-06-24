@@ -107,6 +107,7 @@ use claw_gds::{
     chip::{ChipConfig, build_chip_layout},
     gds_writer::write_gds,
     drc::{check_drc, DrcConfig},
+    layer_map::{mapping as layer_mapping, mapping_names as layer_mapping_names, remap_cell, LayerMap},
 };
 use claw_gds::pcell::PCell;
 use claw_tet::traits::ClawTetMesh;
@@ -4610,12 +4611,40 @@ async fn gds_chip_layout(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
 /// (hex-encoded). This is the chip-level analogue of `/gds/export`, which only
 /// exports a single transmon. Used by the orchestration `gds_generate` stage to
 /// produce a fabrication-ready artifact for the whole design.
+/// JSON mask table for a layer map (the tape-out deck).
+fn layer_map_table(map: &LayerMap) -> Value {
+    let layers: Vec<Value> = map.entries.iter().map(|e| json!({
+        "source_layer": e.source.layer,
+        "source_datatype": e.source.datatype,
+        "gds_layer": e.target.layer,
+        "gds_datatype": e.target.datatype,
+        "mask_name": e.mask_name,
+        "polarity": e.polarity,
+    })).collect();
+    json!({ "name": map.name, "layers": layers })
+}
+
 async fn gds_export_chip(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
     let config = chip_config_from_value(&req);
     let layout = build_chip_layout(&config);
+
+    // Optional foundry layer map (tape-out deck): remap logical layers to the
+    // foundry's mask layers. Unknown name → "default" identity map.
+    let requested = req
+        .get("layer_map")
+        .or_else(|| req.get("deck"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("default")
+        .to_string();
+    let (map_name, map) = match layer_mapping(&requested) {
+        Some(m) => (requested, m),
+        None => ("default".to_string(), layer_mapping("default").unwrap()),
+    };
+    let cell = remap_cell(&layout.cell, &map);
+
     let tmp = NamedTempFile::new().context("tempfile")?;
     let path = tmp.path().with_extension("gds");
-    write_gds(&path, "quantum_api_chip", &[&layout.cell])
+    write_gds(&path, "quantum_api_chip", &[&cell])
         .map_err(|e| anyhow::anyhow!("GDS write: {e}"))?;
     let bytes = std::fs::read(&path).context("read GDS")?;
     let hex = bytes.iter().fold(String::new(), |mut s, b| {
@@ -4630,7 +4659,19 @@ async fn gds_export_chip(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
         "num_qubits": layout.num_qubits,
         "num_resonators": layout.num_resonators,
         "num_bus_couplers": layout.num_bus_couplers,
+        "layer_map": map_name,
+        "layer_table": layer_map_table(&map),
     })))
+}
+
+/// List the available foundry layer maps (tape-out decks) and their mask tables.
+async fn tapeout_layermaps() -> Json<Value> {
+    let maps: Vec<Value> = layer_mapping_names()
+        .iter()
+        .filter_map(|n| layer_mapping(n))
+        .map(|m| layer_map_table(&m))
+        .collect();
+    Json(json!({ "layer_maps": maps }))
 }
 
 /// Serialize a DRC rule deck's per-layer rules for the `/drc/decks` endpoint.
@@ -5706,6 +5747,7 @@ fn build_router() -> Router {
         .route("/drc", post(gds_drc))
         .route("/drc/decks", get(gds_drc_decks))
         .route("/foundry/profiles", get(foundry_profiles))
+        .route("/tapeout/layermaps", get(tapeout_layermaps))
         .route("/junction/recipes", get(junction_recipes))
         .route("/junction/recipe", post(junction_recipe_eval))
         .route("/junction/yield", post(junction_yield))

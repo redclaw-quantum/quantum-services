@@ -28,6 +28,8 @@ pub struct FoundryProfile {
     pub gate_on_drc: bool,
     /// Name of the claw-yield junction process recipe this foundry uses.
     pub junction_recipe: &'static str,
+    /// Name of the claw-gds layer map (tape-out deck) for this foundry.
+    pub layer_map: &'static str,
     /// Required bring-up / characterization measurements.
     pub test_plan: &'static [&'static str],
 }
@@ -42,6 +44,7 @@ impl FoundryProfile {
             "min_feature_nm": self.min_feature_nm,
             "gate_on_drc": self.gate_on_drc,
             "junction_recipe": self.junction_recipe,
+            "layer_map": self.layer_map,
             "test_plan": self.test_plan,
         })
     }
@@ -79,6 +82,7 @@ const PROFILES: &[FoundryProfile] = &[
         min_feature_nm: 500.0,
         gate_on_drc: false,
         junction_recipe: "dolan_alox_standard",
+        layer_map: "default",
         test_plan: STANDARD_TEST_PLAN,
     },
     FoundryProfile {
@@ -89,6 +93,7 @@ const PROFILES: &[FoundryProfile] = &[
         min_feature_nm: 250.0,
         gate_on_drc: true,
         junction_recipe: "manhattan_alox_tight",
+        layer_map: "foundry_generic",
         test_plan: FOUNDRY_TEST_PLAN,
     },
 ];

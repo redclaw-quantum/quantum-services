@@ -211,6 +211,10 @@ impl Stage for TapeoutPackageStage {
                 "junction_recipe": recipe_out.get("recipe").and_then(|r| r.get("name")).cloned().unwrap_or(Value::Null),
                 "junction": recipe_out.get("eval").cloned().unwrap_or(Value::Null),
             },
+            "tapeout_deck": {
+                "layer_map": gds.get("layer_map").cloned().unwrap_or(Value::Null),
+                "layer_table": gds.get("layer_table").cloned().unwrap_or(Value::Null),
+            },
             "test_plan": test_plan,
         });
 
