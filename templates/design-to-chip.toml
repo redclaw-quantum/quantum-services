@@ -141,6 +141,7 @@ timeout_secs = 60
 # tape-out manifest. Discover maps: GET /tapeout/layermaps.
 [stage.params]
 foundry = "university_snf"
+tapeout_frame = true
 
 # ── Stage 9c: Design-rule check over the generated layout ─────────────────────
 # The `university_snf` foundry profile selects the layer-aware

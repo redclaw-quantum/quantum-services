@@ -108,6 +108,7 @@ use claw_gds::{
     gds_writer::write_gds,
     drc::{check_drc, DrcConfig},
     layer_map::{mapping as layer_mapping, mapping_names as layer_mapping_names, remap_cell, LayerMap},
+    fabprep::{add_tapeout_frame, FrameOptions},
 };
 use claw_gds::pcell::PCell;
 use claw_tet::traits::ClawTetMesh;
@@ -4640,7 +4641,15 @@ async fn gds_export_chip(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
         Some(m) => (requested, m),
         None => ("default".to_string(), layer_mapping("default").unwrap()),
     };
-    let cell = remap_cell(&layout.cell, &map);
+
+    // Optional tape-out fab-prep frame: alignment marks + dicing lanes.
+    let mut cell = layout.cell.clone();
+    let frame = if req.get("tapeout_frame").and_then(|v| v.as_bool()).unwrap_or(false) {
+        Some(add_tapeout_frame(&mut cell, &FrameOptions::default()))
+    } else {
+        None
+    };
+    let cell = remap_cell(&cell, &map);
 
     let tmp = NamedTempFile::new().context("tempfile")?;
     let path = tmp.path().with_extension("gds");
@@ -4661,6 +4670,10 @@ async fn gds_export_chip(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
         "num_bus_couplers": layout.num_bus_couplers,
         "layer_map": map_name,
         "layer_table": layer_map_table(&map),
+        "tapeout_frame": frame.map(|f| json!({
+            "alignment_marks": f.n_alignment_marks,
+            "dicing_outer_um": f.dicing_outer_um,
+        })),
     })))
 }
 
