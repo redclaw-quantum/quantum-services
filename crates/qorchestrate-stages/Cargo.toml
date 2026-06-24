@@ -18,3 +18,4 @@ reqwest = { workspace = true }
 nalgebra = { workspace = true }
 async-trait = { workspace = true }
 futures = { workspace = true }
+sha2 = "0.10"

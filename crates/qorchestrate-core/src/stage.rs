@@ -96,6 +96,9 @@ pub enum StageType {
     /// Run a design-rule check over the generated GDS layout. Fails the stage
     /// when violations are found so a non-manufacturable layout blocks the run.
     DrcCheck,
+    /// Assemble the fabrication-handoff bundle (GDS-II + DRC report + validated
+    /// OQFP spec + signed manifest) into a submission directory for a foundry.
+    TapeoutPackage,
     Clawhdf5Save,
     PipelineCall,
     Batch,

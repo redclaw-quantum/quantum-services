@@ -1,14 +1,14 @@
 [pipeline]
 name = "design-to-chip"
-version = "1.1"
-description = "Hamiltonian targets → fabrication-ready OQFP chip spec"
+version = "1.2"
+description = "Hamiltonian targets → fabrication-ready GDS-II + DRC + tape-out package"
 max_concurrency = 4
 default_timeout_secs = 300
 
 [pipeline.output]
-stage = "oqfp_validate"
-field = "validated_spec"
-artifact_key = "chip_spec_v{run_id}"
+stage = "tapeout_package"
+field = "submission_dir"
+artifact_key = "tapeout_v{run_id}"
 
 # ── Stage 1: Inverse design (RMFlow, fallback CMA-ES) ─────────────────────────
 
@@ -150,3 +150,13 @@ id = "oqfp_validate"
 type = "oqfp_validate"
 depends_on = ["oqfp_build"]
 timeout_secs = 5
+
+# ── Stage 12: Assemble fab-handoff tape-out package ───────────────────────────
+# Bundles chip.gds + drc_report.json + oqfp_spec.json + a signed manifest
+# (sha256 per file, fab profile, test plan) into a submission directory.
+
+[[stage]]
+id = "tapeout_package"
+type = "tapeout_package"
+depends_on = ["gds_generate", "drc_check", "oqfp_build", "oqfp_validate"]
+timeout_secs = 30

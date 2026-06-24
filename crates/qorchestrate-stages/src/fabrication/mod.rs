@@ -3,3 +3,4 @@
 //! fabrication-ready artifact rather than stopping at an OQFP spec.
 pub mod drc_check;
 pub mod gds_generate;
+pub mod tapeout;

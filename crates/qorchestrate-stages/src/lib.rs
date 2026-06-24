@@ -117,6 +117,10 @@ pub fn register_standard_stages(registry: &mut StageRegistry) {
         Arc::new(fabrication::drc_check::DrcCheckStage::new()),
     );
     registry.register(
+        StageType::TapeoutPackage,
+        Arc::new(fabrication::tapeout::TapeoutPackageStage::new()),
+    );
+    registry.register(
         StageType::Skip,
         Arc::new(meta::skip::SkipStage::new()),
     );
@@ -247,6 +251,7 @@ mod tests {
         assert!(registry.has(&StageType::OqfpValidate));
         assert!(registry.has(&StageType::GdsGenerate));
         assert!(registry.has(&StageType::DrcCheck));
+        assert!(registry.has(&StageType::TapeoutPackage));
         assert!(registry.has(&StageType::Skip));
         assert!(registry.has(&StageType::QpudidpRmflow));
         assert!(registry.has(&StageType::QpudidpCmaes));
@@ -710,6 +715,8 @@ mod tests {
         assert_eq!(s.stage_type(), StageType::GdsGenerate);
         let s = fabrication::drc_check::DrcCheckStage::new();
         assert_eq!(s.stage_type(), StageType::DrcCheck);
+        let s = fabrication::tapeout::TapeoutPackageStage::new();
+        assert_eq!(s.stage_type(), StageType::TapeoutPackage);
 
         // process
         let s = process::processes::QcircProcessesStage::new();
@@ -944,6 +951,49 @@ mod tests {
             .expect("drc_check (report-only) should not fail");
         assert!(report.get("num_violations").is_some(), "report has num_violations: {report}");
         assert!(report.get("clean").is_some(), "report has clean flag: {report}");
+    }
+
+    #[tokio::test]
+    async fn integration_tapeout_package_execute_raw() {
+        let api_url = match integration_api_url() {
+            Some(u) => u,
+            None => return,
+        };
+        let ctx = integration_ctx(&api_url);
+
+        // Real GDS from the live API, then a real DRC report over it.
+        let gen_out = fabrication::gds_generate::GdsGenerateStage::new()
+            .execute_raw(
+                json!({"freq_plan_output": {"assignments": [{"qubit": 0}, {"qubit": 1}, {"qubit": 2}]}}),
+                &ctx,
+            )
+            .await
+            .expect("gds_generate ok");
+        let drc_out = fabrication::drc_check::DrcCheckStage::new()
+            .execute_raw(json!({ "gds_generate_output": gen_out.clone() }), &ctx)
+            .await
+            .expect("drc_check ok");
+
+        let out = fabrication::tapeout::TapeoutPackageStage::new()
+            .execute_raw(
+                json!({
+                    "gds_generate_output": gen_out,
+                    "drc_check_output": drc_out,
+                    "oqfp_build_output": { "oqfp_spec": { "oqfp_version": "1.0" } },
+                    "oqfp_validate_output": { "validated": true }
+                }),
+                &ctx,
+            )
+            .await
+            .expect("tapeout_package ok");
+
+        let dir = out["submission_dir"].as_str().expect("submission_dir");
+        assert!(std::path::Path::new(dir).join("chip.gds").exists());
+        assert!(std::path::Path::new(dir).join("manifest.json").exists());
+        // GDS-II files begin with a HEADER record (0x00 0x06 0x00 0x02 ...).
+        let gds = std::fs::read(std::path::Path::new(dir).join("chip.gds")).unwrap();
+        assert!(gds.len() > 4 && gds[0] == 0x00 && gds[2] == 0x00 && gds[3] == 0x02);
+        assert!(out["manifest"]["files"]["chip.gds"]["sha256"].is_string());
     }
 
     #[tokio::test]
