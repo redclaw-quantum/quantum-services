@@ -84,6 +84,14 @@ fn chip_params_from_input(input: &Value) -> Value {
     if let Some(lm) = layer_map {
         obj.insert("layer_map".to_string(), json!(lm));
     }
+
+    // Tape-out fab-prep frame (alignment marks + dicing lanes): on by default
+    // for the pipeline so the bundled chip.gds is submission-ready.
+    let frame = input
+        .get("tapeout_frame")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+    obj.insert("tapeout_frame".to_string(), json!(frame));
     params
 }
 
