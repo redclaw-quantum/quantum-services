@@ -21,6 +21,8 @@ reqwest = { version = "0.12", features = ["json"] }
 claw-mesh = { path = "../../../mesh/crates/claw-mesh" }
 claw-gds  = { path = "../../../mesh/crates/claw-gds" }
 claw-tet  = { path = "../../../mesh/crates/claw-tet" }
+claw-yield = { path = "../../../mesh/crates/claw-yield" }
+claw-yield-gpu = { path = "../../../mesh/crates/claw-yield-gpu" }
 qservices-common = { workspace = true }
 
 [dev-dependencies]

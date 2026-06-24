@@ -122,6 +122,10 @@ impl Stage for TapeoutPackageStage {
             .cloned()
             .unwrap_or(Value::Null);
         let oqfp_spec = oqfp_build.get("oqfp_spec").cloned().unwrap_or(Value::Null);
+        let recipe_out = input
+            .get("process_recipe_output")
+            .cloned()
+            .unwrap_or(Value::Null);
         let validated = oqfp_validate
             .get("validated")
             .and_then(|v| v.as_bool())
@@ -202,6 +206,10 @@ impl Stage for TapeoutPackageStage {
                     "sha256": sha256_hex(&spec_bytes),
                     "validated": validated,
                 },
+            },
+            "process": {
+                "junction_recipe": recipe_out.get("recipe").and_then(|r| r.get("name")).cloned().unwrap_or(Value::Null),
+                "junction": recipe_out.get("eval").cloned().unwrap_or(Value::Null),
             },
             "test_plan": test_plan,
         });

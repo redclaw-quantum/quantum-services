@@ -26,6 +26,8 @@ pub struct FoundryProfile {
     pub min_feature_nm: f64,
     /// Whether DRC violations should block the tape-out (gate the pipeline).
     pub gate_on_drc: bool,
+    /// Name of the claw-yield junction process recipe this foundry uses.
+    pub junction_recipe: &'static str,
     /// Required bring-up / characterization measurements.
     pub test_plan: &'static [&'static str],
 }
@@ -39,6 +41,7 @@ impl FoundryProfile {
             "fab_process": self.fab_process,
             "min_feature_nm": self.min_feature_nm,
             "gate_on_drc": self.gate_on_drc,
+            "junction_recipe": self.junction_recipe,
             "test_plan": self.test_plan,
         })
     }
@@ -75,6 +78,7 @@ const PROFILES: &[FoundryProfile] = &[
         fab_process: "AlOx_0.5um",
         min_feature_nm: 500.0,
         gate_on_drc: false,
+        junction_recipe: "dolan_alox_standard",
         test_plan: STANDARD_TEST_PLAN,
     },
     FoundryProfile {
@@ -84,6 +88,7 @@ const PROFILES: &[FoundryProfile] = &[
         fab_process: "AlOx_0.25um",
         min_feature_nm: 250.0,
         gate_on_drc: true,
+        junction_recipe: "manhattan_alox_tight",
         test_plan: FOUNDRY_TEST_PLAN,
     },
 ];
