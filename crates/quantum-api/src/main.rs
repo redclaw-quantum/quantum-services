@@ -4597,6 +4597,47 @@ async fn gds_health() -> Json<Value> {
     Json(json!({"status": "ok", "service": "claw-gds"}))
 }
 
+async fn clawprint_health() -> Json<Value> {
+    Json(json!({"status": "ok", "service": "clawprint"}))
+}
+
+/// POST /clawprint/dressed — transmon⊗resonator dressed analysis (χ, e0g1/f0g1
+/// sideband frequencies, dressed spectrum) via the `clawprint` CLI. Body fields
+/// are all optional (the CLI supplies defaults): {f01_ghz, ec_ghz, ng, n_cut,
+/// transmon_dim, omega_r_ghz, res_ec_ghz, fock_dim, g_ghz, target_chi_mhz,
+/// n_report}. Omit `g_ghz` to calibrate the coupling to `target_chi_mhz`.
+async fn clawprint_dressed(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    let mut argv: Vec<String> = vec!["dressed".to_string()];
+    for (key, flag) in [
+        ("f01_ghz", "--f01-ghz"),
+        ("ec_ghz", "--ec-ghz"),
+        ("ng", "--ng"),
+        ("omega_r_ghz", "--omega-r-ghz"),
+        ("res_ec_ghz", "--res-ec-ghz"),
+        ("g_ghz", "--g-ghz"),
+        ("target_chi_mhz", "--target-chi-mhz"),
+    ] {
+        if let Some(x) = req.get(key).and_then(|v| v.as_f64()) {
+            argv.push(flag.to_string());
+            argv.push(format!("{x}"));
+        }
+    }
+    for (key, flag) in [
+        ("n_cut", "--n-cut"),
+        ("transmon_dim", "--transmon-dim"),
+        ("fock_dim", "--fock-dim"),
+        ("n_report", "--n-report"),
+    ] {
+        if let Some(x) = req.get(key).and_then(|v| v.as_u64()) {
+            argv.push(flag.to_string());
+            argv.push(x.to_string());
+        }
+    }
+    let args: Vec<&str> = argv.iter().map(String::as_str).collect();
+    let result = run_tool("clawprint", &args)?;
+    Ok(Json(result))
+}
+
 async fn gds_transmon_cross(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
     let params: TransmonCrossParams = serde_json::from_value(req)
         .unwrap_or_default();
@@ -5843,6 +5884,9 @@ fn build_router() -> Router {
         .route("/mesh/cpw-resonator", post(mesh_cpw_resonator))
         .route("/mesh/chip", post(mesh_chip))
         .route("/mesh/quality", post(mesh_quality_endpoint))
+        // clawprint device modeling (blueprint displacement Phase 4)
+        .route("/clawprint/health", get(clawprint_health))
+        .route("/clawprint/dressed", post(clawprint_dressed))
         // claw-gds (Phase 7X)
         .route("/gds/health", get(gds_health))
         .route("/gds/transmon-cross", post(gds_transmon_cross))
