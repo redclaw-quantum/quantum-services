@@ -5131,6 +5131,12 @@ async fn gds_export_chip(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
     };
     let cell = remap_cell(&cell, &map);
     let job_deck = mask_job_deck(&cell, &map);
+    // Mask fracture: decompose every figure into trapezoids + compliance report.
+    let vertex_limit = req
+        .get("vertex_limit")
+        .and_then(as_u64_loose)
+        .unwrap_or(200) as usize;
+    let fracture = claw_gds::fracture::fracture_cell(&cell, vertex_limit);
 
     let tmp = NamedTempFile::new().context("tempfile")?;
     let path = tmp.path().with_extension("gds");
@@ -5157,6 +5163,7 @@ async fn gds_export_chip(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
         })),
         "dummy_fill_tiles": n_fill,
         "job_deck": job_deck,
+        "fracture": serde_json::to_value(&fracture).unwrap_or(Value::Null),
     })))
 }
 
