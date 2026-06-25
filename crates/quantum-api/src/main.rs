@@ -3570,6 +3570,24 @@ async fn codesign_health() -> Json<Value> {
     Json(json!({"status": "ok", "tool": "codesign"}))
 }
 
+/// POST /qec/compile — cross-platform QEC compiler. Body: `{ platform, physical_error_rate?,
+/// target_ler? }`. Recommends a code + distance + decoder per modality (ion/atom can run
+/// non-planar qLDPC; SC/spin fall back to surface/floquet) with physical-qubit overhead.
+async fn qec_compile(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    let platform = req
+        .get("platform")
+        .and_then(|v| v.as_str())
+        .unwrap_or("superconducting")
+        .to_string();
+    let per = req.get("physical_error_rate").and_then(|v| v.as_f64()).unwrap_or(1e-3);
+    let ler = req.get("target_ler").and_then(|v| v.as_f64()).unwrap_or(1e-9);
+    let a_p = format!("--platform={platform}");
+    let a_e = format!("--physical-error-rate={per}");
+    let a_l = format!("--target-ler={ler}");
+    let result = run_tool("codesign", &["qec-compile", "--json", &a_p, &a_e, &a_l])?;
+    Ok(Json(result))
+}
+
 /// POST /codesign/optimize — find optimal hardware/QEC co-design for an application.
 ///
 /// Accepts: `{ "app": "chemistry"|"factoring"|"optimization"|"ml"|"simulation",
@@ -6076,6 +6094,7 @@ fn build_router() -> Router {
         .route("/codesign/compare-platforms", post(codesign_compare_platforms))
         .route("/codesign/what-if", post(codesign_what_if))
         .route("/codesign/sensitivity", post(codesign_sensitivity))
+        .route("/qec/compile", post(qec_compile))
         // rustyqopt (QAOA)
         .route("/qaoa/health", get(qaoa_health))
         .route("/qaoa/maxcut", post(qaoa_maxcut))

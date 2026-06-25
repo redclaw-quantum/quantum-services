@@ -1,6 +1,6 @@
-# qec_assessment.toml — QEC threshold + surgery resource + pulse-QEC pipeline
+# qec_assessment.toml — cross-platform QEC compile + threshold + surgery + pulse-QEC
 #
-# Stages: QecThreshold → SurgeryResources → PqecAssess
+# Stages: QecCompile → QecThreshold → SurgeryResources → PqecAssess
 # Typical runtime: ~45 s on quantum-api:8765
 #
 # Usage:
@@ -12,9 +12,16 @@ version = "1.0"
 max_concurrency = 1
 default_timeout_secs = 120
 
+# Recommend a code + distance + decoder for the target platform up front.
+[[stage]]
+id = "compile"
+type = "qec_compile"
+params = { platform = "superconducting", physical_error_rate = 1e-3, target_ler = 1e-9 }
+
 [[stage]]
 id = "threshold"
 type = "qec_threshold"
+depends_on = ["compile"]
 params = { code = "surface", distances = "3,5,7", shots = 1000 }
 
 [[stage]]
