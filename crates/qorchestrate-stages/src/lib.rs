@@ -97,6 +97,10 @@ pub fn register_standard_stages(registry: &mut StageRegistry) {
         Arc::new(twin::metrology_ingest::MetrologyIngestStage::new()),
     );
     registry.register(
+        StageType::MetrologyAcquire,
+        Arc::new(twin::metrology_acquire::MetrologyAcquireStage::new()),
+    );
+    registry.register(
         StageType::QexplorePareto,
         Arc::new(explore::pareto::QexploreParetoStage::new()),
     );
@@ -282,6 +286,7 @@ mod tests {
         assert!(registry.has(&StageType::TwinQecUpdate));
         assert!(registry.has(&StageType::TwinMock));
         assert!(registry.has(&StageType::MetrologyIngest));
+        assert!(registry.has(&StageType::MetrologyAcquire));
         assert!(registry.has(&StageType::QexplorePareto));
         assert!(registry.has(&StageType::FreqYield));
         assert!(registry.has(&StageType::BenchPredict));
@@ -750,6 +755,8 @@ mod tests {
         assert_eq!(s.stage_type(), StageType::TwinMock);
         let s = twin::metrology_ingest::MetrologyIngestStage::new();
         assert_eq!(s.stage_type(), StageType::MetrologyIngest);
+        let s = twin::metrology_acquire::MetrologyAcquireStage::new();
+        assert_eq!(s.stage_type(), StageType::MetrologyAcquire);
 
         // fabrication
         let s = fabrication::gds_generate::GdsGenerateStage::new();
