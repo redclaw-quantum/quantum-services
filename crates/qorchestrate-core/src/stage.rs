@@ -78,6 +78,8 @@ pub enum StageType {
     DragOptimize,
     PqecAssess,
     QecThreshold,
+    /// Cross-platform QEC compiler: modality → recommended code/distance/decoder.
+    QecCompile,
     TwinCompare,
     TwinRecalibrate,
     TwinQecUpdate,

@@ -69,6 +69,10 @@ pub fn register_standard_stages(registry: &mut StageRegistry) {
         Arc::new(qec::qec_threshold::QecThresholdStage::new()),
     );
     registry.register(
+        StageType::QecCompile,
+        Arc::new(qec::qec_compile::QecCompileStage::new()),
+    );
+    registry.register(
         StageType::SurgeryResources,
         Arc::new(qec::surgery::SurgeryStage::new()),
     );
@@ -271,6 +275,7 @@ mod tests {
         assert!(registry.has(&StageType::DragOptimize));
         assert!(registry.has(&StageType::PqecAssess));
         assert!(registry.has(&StageType::QecThreshold));
+        assert!(registry.has(&StageType::QecCompile));
         assert!(registry.has(&StageType::SurgeryResources));
         assert!(registry.has(&StageType::TwinCompare));
         assert!(registry.has(&StageType::TwinRecalibrate));
@@ -719,6 +724,8 @@ mod tests {
         assert_eq!(s.stage_type(), StageType::PqecAssess);
         let s = qec::qec_threshold::QecThresholdStage::new();
         assert_eq!(s.stage_type(), StageType::QecThreshold);
+        let s = qec::qec_compile::QecCompileStage::new();
+        assert_eq!(s.stage_type(), StageType::QecCompile);
         let s = qec::surgery::SurgeryStage::new();
         assert_eq!(s.stage_type(), StageType::SurgeryResources);
 
