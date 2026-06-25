@@ -3068,6 +3068,67 @@ async fn qspin_yield(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
 /// Accepts: `{ "n_dots": u32, "platform": str, "si_fraction_mean": f64,
 ///             "si_fraction_std": f64, "n_samples": u32,
 ///             "interface_width_nm": f64, "threshold_uev": f64 }`.
+/// POST /qspin/pulse — silicon-spin gate-pulse budget (DRAG EDSR/ESR).
+async fn qspin_pulse(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    let rb = req.get("rabi_mhz").and_then(|v| v.as_f64()).unwrap_or(5.0);
+    let os = req.get("orbital_splitting_mev").and_then(|v| v.as_f64()).unwrap_or(1.5);
+    let vs = req.get("valley_splitting_uev").and_then(|v| v.as_f64()).unwrap_or(50.0);
+    let cn = req.get("charge_noise_mhz").and_then(|v| v.as_f64()).unwrap_or(0.05);
+    let no_drag = req.get("no_drag").and_then(|v| v.as_bool()).unwrap_or(false);
+    let a_rb = format!("--rabi-mhz={rb}");
+    let a_os = format!("--orbital-splitting-mev={os}");
+    let a_vs = format!("--valley-splitting-uev={vs}");
+    let a_cn = format!("--charge-noise-mhz={cn}");
+    let mut args: Vec<&str> = vec!["pulse", "--json", &a_rb, &a_os, &a_vs, &a_cn];
+    if no_drag {
+        args.push("--no-drag");
+    }
+    let result = run_tool("qspin", &args)?;
+    Ok(Json(result))
+}
+
+/// POST /qion/pulse — trapped-ion gate-pulse budget (MS shaping).
+async fn qion_pulse(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    let gr = req.get("gate_rabi_khz").and_then(|v| v.as_f64()).unwrap_or(50.0);
+    let mf = req.get("mode_freq_khz").and_then(|v| v.as_f64()).unwrap_or(3000.0);
+    let me = req.get("mode_freq_error_khz").and_then(|v| v.as_f64()).unwrap_or(1.0);
+    let gt = req.get("gate_time_us").and_then(|v| v.as_f64()).unwrap_or(100.0);
+    let nm = req.get("n_modes").and_then(as_u64_loose).unwrap_or(5);
+    let t2 = req.get("t2_us").and_then(|v| v.as_f64()).unwrap_or(1_000_000.0);
+    let no_shaping = req.get("no_shaping").and_then(|v| v.as_bool()).unwrap_or(false);
+    let a_gr = format!("--gate-rabi-khz={gr}");
+    let a_mf = format!("--mode-freq-khz={mf}");
+    let a_me = format!("--mode-freq-error-khz={me}");
+    let a_gt = format!("--gate-time-us={gt}");
+    let a_nm = format!("--n-modes={nm}");
+    let a_t2 = format!("--t2-us={t2}");
+    let mut args: Vec<&str> = vec!["pulse", "--json", &a_gr, &a_mf, &a_me, &a_gt, &a_nm, &a_t2];
+    if no_shaping {
+        args.push("--no-shaping");
+    }
+    let result = run_tool("qion", &args)?;
+    Ok(Json(result))
+}
+
+/// POST /qatom/pulse — neutral-atom gate-pulse budget (Rydberg CZ shaping).
+async fn qatom_pulse(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    let rb = req.get("rabi_mhz").and_then(|v| v.as_f64()).unwrap_or(5.0);
+    let dt = req.get("detuning_mhz").and_then(|v| v.as_f64()).unwrap_or(500.0);
+    let bl = req.get("blockade_mhz").and_then(|v| v.as_f64()).unwrap_or(50.0);
+    let co = req.get("coherence_us").and_then(|v| v.as_f64()).unwrap_or(100.0);
+    let no_shaping = req.get("no_shaping").and_then(|v| v.as_bool()).unwrap_or(false);
+    let a_rb = format!("--rabi-mhz={rb}");
+    let a_dt = format!("--detuning-mhz={dt}");
+    let a_bl = format!("--blockade-mhz={bl}");
+    let a_co = format!("--coherence-us={co}");
+    let mut args: Vec<&str> = vec!["pulse", "--json", &a_rb, &a_dt, &a_bl, &a_co];
+    if no_shaping {
+        args.push("--no-shaping");
+    }
+    let result = run_tool("qatom", &args)?;
+    Ok(Json(result))
+}
+
 /// POST /qspin/frequency — silicon-spin Larmor-frequency plan (collision detection).
 async fn qspin_frequency(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
     let nd = req.get("n_dots").and_then(as_u64_loose).unwrap_or(8);
@@ -5969,6 +6030,7 @@ fn build_router() -> Router {
         .route("/qatom/readout", post(qatom_readout))
         .route("/qatom/crosstalk", post(qatom_crosstalk))
         .route("/qatom/frequency", post(qatom_frequency))
+        .route("/qatom/pulse", post(qatom_pulse))
         // rustypulse-qec
         .route("/pqec/health", get(pqec_health))
         .route("/pqec/assess", post(pqec_assess))
@@ -5987,6 +6049,7 @@ fn build_router() -> Router {
         .route("/qspin/readout", post(qspin_readout))
         .route("/qspin/crosstalk", post(qspin_crosstalk))
         .route("/qspin/frequency", post(qspin_frequency))
+        .route("/qspin/pulse", post(qspin_pulse))
         // rustyqion
         .route("/qion/health", get(qion_health))
         .route("/qion/design", post(qion_design))
@@ -5998,6 +6061,7 @@ fn build_router() -> Router {
         .route("/qion/readout", post(qion_readout))
         .route("/qion/crosstalk", post(qion_crosstalk))
         .route("/qion/frequency", post(qion_frequency))
+        .route("/qion/pulse", post(qion_pulse))
         // rustybosonic
         .route("/bosonic/health", get(bosonic_health))
         .route("/bosonic/simulate", post(bosonic_simulate))
