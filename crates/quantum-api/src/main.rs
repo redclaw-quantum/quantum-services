@@ -3068,6 +3068,50 @@ async fn qspin_yield(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
 /// Accepts: `{ "n_dots": u32, "platform": str, "si_fraction_mean": f64,
 ///             "si_fraction_std": f64, "n_samples": u32,
 ///             "interface_width_nm": f64, "threshold_uev": f64 }`.
+/// POST /qspin/frequency — silicon-spin Larmor-frequency plan (collision detection).
+async fn qspin_frequency(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    let nd = req.get("n_dots").and_then(as_u64_loose).unwrap_or(8);
+    let bf = req.get("b_field_t").and_then(|v| v.as_f64()).unwrap_or(0.5);
+    let gf = req.get("g_factor").and_then(|v| v.as_f64()).unwrap_or(2.0);
+    let gr = req.get("gradient_mhz").and_then(|v| v.as_f64()).unwrap_or(20.0);
+    let rb = req.get("rabi_mhz").and_then(|v| v.as_f64()).unwrap_or(1.0);
+    let a_nd = format!("--n-dots={nd}");
+    let a_bf = format!("--b-field-t={bf}");
+    let a_gf = format!("--g-factor={gf}");
+    let a_gr = format!("--gradient-mhz={gr}");
+    let a_rb = format!("--rabi-mhz={rb}");
+    let result = run_tool("qspin", &["frequency", "--json", &a_nd, &a_bf, &a_gf, &a_gr, &a_rb])?;
+    Ok(Json(result))
+}
+
+/// POST /qion/frequency — trapped-ion AOM tone plan (crowding + sidebands).
+async fn qion_frequency(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    let ni = req.get("n_ions").and_then(as_u64_loose).unwrap_or(5);
+    let sp = req.get("addressing_spacing_mhz").and_then(|v| v.as_f64()).unwrap_or(5.0);
+    let bw = req.get("aom_bandwidth_mhz").and_then(|v| v.as_f64()).unwrap_or(1.0);
+    let mf = req.get("mode_freq_mhz").and_then(|v| v.as_f64()).unwrap_or(3.0);
+    let bs = req.get("base_mhz").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let a_ni = format!("--n-ions={ni}");
+    let a_sp = format!("--addressing-spacing-mhz={sp}");
+    let a_bw = format!("--aom-bandwidth-mhz={bw}");
+    let a_mf = format!("--mode-freq-mhz={mf}");
+    let a_bs = format!("--base-mhz={bs}");
+    let result = run_tool("qion", &["frequency", "--json", &a_ni, &a_sp, &a_bw, &a_mf, &a_bs])?;
+    Ok(Json(result))
+}
+
+/// POST /qatom/frequency — neutral-atom addressing-frequency plan (crowding).
+async fn qatom_frequency(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    let nq = req.get("n_qubits").and_then(as_u64_loose).unwrap_or(10);
+    let gr = req.get("addressing_gradient_mhz").and_then(|v| v.as_f64()).unwrap_or(10.0);
+    let lw = req.get("addressing_linewidth_mhz").and_then(|v| v.as_f64()).unwrap_or(1.0);
+    let a_nq = format!("--n-qubits={nq}");
+    let a_gr = format!("--addressing-gradient-mhz={gr}");
+    let a_lw = format!("--addressing-linewidth-mhz={lw}");
+    let result = run_tool("qatom", &["frequency", "--json", &a_nq, &a_gr, &a_lw])?;
+    Ok(Json(result))
+}
+
 /// POST /qspin/crosstalk — silicon-spin crosstalk budget (residual exchange + capacitive).
 async fn qspin_crosstalk(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
     let ex = req.get("exchange_residual_mhz").and_then(|v| v.as_f64()).unwrap_or(0.05);
@@ -5924,6 +5968,7 @@ fn build_router() -> Router {
         .route("/qatom/coherence", post(qatom_coherence))
         .route("/qatom/readout", post(qatom_readout))
         .route("/qatom/crosstalk", post(qatom_crosstalk))
+        .route("/qatom/frequency", post(qatom_frequency))
         // rustypulse-qec
         .route("/pqec/health", get(pqec_health))
         .route("/pqec/assess", post(pqec_assess))
@@ -5941,6 +5986,7 @@ fn build_router() -> Router {
         .route("/qspin/coherence", post(qspin_coherence))
         .route("/qspin/readout", post(qspin_readout))
         .route("/qspin/crosstalk", post(qspin_crosstalk))
+        .route("/qspin/frequency", post(qspin_frequency))
         // rustyqion
         .route("/qion/health", get(qion_health))
         .route("/qion/design", post(qion_design))
@@ -5951,6 +5997,7 @@ fn build_router() -> Router {
         .route("/qion/coherence", post(qion_coherence))
         .route("/qion/readout", post(qion_readout))
         .route("/qion/crosstalk", post(qion_crosstalk))
+        .route("/qion/frequency", post(qion_frequency))
         // rustybosonic
         .route("/bosonic/health", get(bosonic_health))
         .route("/bosonic/simulate", post(bosonic_simulate))
