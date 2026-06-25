@@ -108,7 +108,7 @@ use claw_gds::{
     gds_writer::write_gds,
     drc::{check_drc, DrcConfig},
     layer_map::{mapping as layer_mapping, mapping_names as layer_mapping_names, remap_cell, LayerMap},
-    fabprep::{add_tapeout_frame, FrameOptions},
+    fabprep::{add_dummy_fill, add_tapeout_frame, FillOptions, FrameOptions},
 };
 use claw_gds::pcell::PCell;
 use claw_tet::traits::ClawTetMesh;
@@ -4625,6 +4625,59 @@ fn layer_map_table(map: &LayerMap) -> Value {
     json!({ "name": map.name, "layers": layers })
 }
 
+/// Shoelace area of a polygon (µm²).
+fn polygon_area_um2(verts: &[[f64; 2]]) -> f64 {
+    let n = verts.len();
+    if n < 3 {
+        return 0.0;
+    }
+    let mut a = 0.0;
+    for i in 0..n {
+        let j = (i + 1) % n;
+        a += verts[i][0] * verts[j][1] - verts[j][0] * verts[i][1];
+    }
+    a.abs() * 0.5
+}
+
+/// Mask job deck: per-mask-layer summary of the final (remapped) layout — what a
+/// foundry / mask shop needs to plan the mask set.
+fn mask_job_deck(cell: &PCell, map: &LayerMap) -> Value {
+    use std::collections::BTreeMap;
+    // target GDS layer → (mask_name, polarity)
+    let mut names: BTreeMap<(i16, i16), (&str, &str)> = BTreeMap::new();
+    for e in map.entries {
+        names.insert((e.target.layer, e.target.datatype), (e.mask_name, e.polarity));
+    }
+    // group polygons by GDS layer: (count, bbox, total area)
+    let mut groups: BTreeMap<(i16, i16), (usize, [f64; 4], f64)> = BTreeMap::new();
+    for p in &cell.polygons {
+        let g = groups.entry((p.layer.layer, p.layer.datatype)).or_insert((
+            0,
+            [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY],
+            0.0,
+        ));
+        g.0 += 1;
+        for &[x, y] in &p.vertices {
+            g.1[0] = g.1[0].min(x);
+            g.1[1] = g.1[1].min(y);
+            g.1[2] = g.1[2].max(x);
+            g.1[3] = g.1[3].max(y);
+        }
+        g.2 += polygon_area_um2(&p.vertices);
+    }
+    let masks: Vec<Value> = groups
+        .iter()
+        .map(|(&(l, d), &(n, bb, area))| {
+            let (mn, pol) = names.get(&(l, d)).copied().unwrap_or(("unknown", "positive"));
+            json!({
+                "gds_layer": l, "gds_datatype": d, "mask_name": mn, "polarity": pol,
+                "n_polygons": n, "bbox_um": bb, "area_um2": area,
+            })
+        })
+        .collect();
+    json!({ "n_masks": masks.len(), "masks": masks })
+}
+
 async fn gds_export_chip(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
     let config = chip_config_from_value(&req);
     let layout = build_chip_layout(&config);
@@ -4642,14 +4695,21 @@ async fn gds_export_chip(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
         None => ("default".to_string(), layer_mapping("default").unwrap()),
     };
 
-    // Optional tape-out fab-prep frame: alignment marks + dicing lanes.
+    // Tape-out fab-prep: dummy fill first (inside the device), then the frame
+    // (alignment marks + dicing lanes, outside).
     let mut cell = layout.cell.clone();
+    let n_fill = if req.get("dummy_fill").and_then(|v| v.as_bool()).unwrap_or(false) {
+        Some(add_dummy_fill(&mut cell, &FillOptions::default()))
+    } else {
+        None
+    };
     let frame = if req.get("tapeout_frame").and_then(|v| v.as_bool()).unwrap_or(false) {
         Some(add_tapeout_frame(&mut cell, &FrameOptions::default()))
     } else {
         None
     };
     let cell = remap_cell(&cell, &map);
+    let job_deck = mask_job_deck(&cell, &map);
 
     let tmp = NamedTempFile::new().context("tempfile")?;
     let path = tmp.path().with_extension("gds");
@@ -4674,6 +4734,8 @@ async fn gds_export_chip(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
             "alignment_marks": f.n_alignment_marks,
             "dicing_outer_um": f.dicing_outer_um,
         })),
+        "dummy_fill_tiles": n_fill,
+        "job_deck": job_deck,
     })))
 }
 

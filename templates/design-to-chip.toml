@@ -142,6 +142,7 @@ timeout_secs = 60
 [stage.params]
 foundry = "university_snf"
 tapeout_frame = true
+dummy_fill = true
 
 # ── Stage 9c: Design-rule check over the generated layout ─────────────────────
 # The `university_snf` foundry profile selects the layer-aware
