@@ -392,6 +392,74 @@ async fn qtwin_compare(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
 /// the design (DesignSpec or OQFP spec), and (by default) emit recalibration
 /// suggestions. Body: { measurement: <CryoMeasurementRecord>, design: <spec>,
 /// recalibrate?: bool }.
+/// Shared impl for `/qtwin/acquire` (record only) and `/qtwin/characterize`
+/// (acquire → compare → twin + recalibration). Shells to `qtwin acquire`, which
+/// runs the simulated-fridge characterization (spectroscopy/T1/T2/readout fits).
+async fn qtwin_acquire_impl(req: Value, ingest: bool) -> ApiResult<Json<Value>> {
+    let design = req.get("design").cloned().ok_or_else(|| {
+        ApiError(anyhow::anyhow!("qtwin/acquire: missing `design` (DesignSpec or OQFP spec)"))
+    })?;
+    let design_f = write_temp_json(&design)?;
+
+    let seed = req.get("seed").and_then(|v| v.as_u64()).unwrap_or(1);
+    let freq_sigma = req.get("freq_sigma_mhz").and_then(|v| v.as_f64()).unwrap_or(10.0);
+    let coh_sigma = req.get("coherence_sigma").and_then(|v| v.as_f64()).unwrap_or(0.1);
+    let noise = req.get("noise").and_then(|v| v.as_f64()).unwrap_or(0.015);
+    let date = req.get("date").and_then(|v| v.as_str()).unwrap_or("2026-06-25").to_string();
+    let offsets = req.get("freq_offsets").and_then(|v| match v {
+        Value::Array(a) => Some(
+            a.iter()
+                .filter_map(|x| x.as_f64())
+                .map(|f| f.to_string())
+                .collect::<Vec<_>>()
+                .join(","),
+        ),
+        Value::String(s) => Some(s.clone()),
+        _ => None,
+    });
+
+    let a_seed = format!("--seed={seed}");
+    let a_fs = format!("--freq-sigma-mhz={freq_sigma}");
+    let a_cs = format!("--coherence-sigma={coh_sigma}");
+    let a_n = format!("--noise={noise}");
+    let a_d = format!("--date={date}");
+    let design_path = design_f.path().to_str().unwrap().to_string();
+    let mut args: Vec<String> = vec![
+        "acquire".into(),
+        "--design".into(),
+        design_path,
+        a_seed,
+        a_fs,
+        a_cs,
+        a_n,
+        a_d,
+        "--json".into(),
+    ];
+    if let Some(o) = offsets.filter(|s| !s.is_empty()) {
+        args.push("--freq-offsets".into());
+        args.push(o);
+    }
+    if ingest {
+        args.push("--ingest".into());
+    }
+    let argref: Vec<&str> = args.iter().map(String::as_str).collect();
+    let result = run_tool("qtwin", &argref)?;
+    Ok(Json(result))
+}
+
+/// POST /qtwin/acquire — run a (simulated) instrument characterization of a
+/// design and return the raw `CryoMeasurementRecord`. Body: `{ design, seed?,
+/// freq_sigma_mhz?, coherence_sigma?, freq_offsets?, noise?, date? }`.
+async fn qtwin_acquire(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    qtwin_acquire_impl(req, false).await
+}
+
+/// POST /qtwin/characterize — the full software loop: acquire → compare against
+/// the design → digital twin + recalibration (closes design→fab→measure→twin).
+async fn qtwin_characterize(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    qtwin_acquire_impl(req, true).await
+}
+
 async fn qtwin_ingest(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
     let measurement = req.get("measurement").cloned().ok_or_else(|| {
         ApiError(anyhow::anyhow!("qtwin/ingest: missing `measurement` (CryoMeasurementRecord)"))
@@ -5919,6 +5987,8 @@ fn build_router() -> Router {
         .route("/qtwin/compare", post(qtwin_compare))
         .route("/qtwin/:chip/compare", get(qtwin_compare_chip))
         .route("/qtwin/ingest", post(qtwin_ingest))
+        .route("/qtwin/acquire", post(qtwin_acquire))
+        .route("/qtwin/characterize", post(qtwin_characterize))
         .route("/qtwin/recalibrate", post(qtwin_recalibrate))
         .route("/qtwin/qec-update", post(qtwin_qec_update))
         .route("/qtwin/mock", post(qtwin_mock))

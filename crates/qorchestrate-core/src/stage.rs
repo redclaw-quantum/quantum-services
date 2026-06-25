@@ -87,6 +87,9 @@ pub enum StageType {
     /// Ingest a raw cryo-measurement record → compare against the design →
     /// digital twin + recalibration (metrology ingestion, post-fab loop).
     MetrologyIngest,
+    /// Acquire a (simulated-instrument) characterization of a design → compare
+    /// → twin + recalibration (closes the loop without a hand-supplied record).
+    MetrologyAcquire,
     BenchPredict,
     QexplorePareto,
     FreqYield,

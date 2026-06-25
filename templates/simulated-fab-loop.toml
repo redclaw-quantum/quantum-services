@@ -1,0 +1,35 @@
+[pipeline]
+name = "simulated-fab-loop"
+version = "1.0"
+description = "Software-closed design→fab→measure→twin loop: simulated-instrument acquisition → characterization → digital twin + recalibration (no hand-supplied measurement record)"
+max_concurrency = 1
+default_timeout_secs = 120
+
+[pipeline.output]
+stage = "metrology_acquire"
+field = "twin"
+artifact_key = "twin_{run_id}"
+
+# ── Acquire + characterize ───────────────────────────────────────────────────
+# Supply `design` (DesignSpec or OQFP) as a run param. The simulated fridge
+# injects fab deviations (freq_offsets / freq_sigma_mhz / coherence_sigma), runs
+# spectroscopy/T1/T2/readout experiments, fits them into a CryoMeasurementRecord,
+# compares against the design, and returns the twin + recalibration. Swap the
+# backend for a real instrument driver to run on hardware unchanged.
+
+[[stage]]
+id = "metrology_acquire"
+type = "metrology_acquire"
+depends_on = []
+timeout_secs = 30
+
+# ── QEC reassessment against the measured twin ───────────────────────────────
+
+[[stage]]
+id = "qec_reassess"
+type = "twin_qec_update"
+depends_on = ["metrology_acquire"]
+timeout_secs = 30
+
+[stage.params]
+code = "surface"
