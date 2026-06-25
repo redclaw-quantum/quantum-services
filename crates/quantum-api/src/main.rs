@@ -3068,6 +3068,54 @@ async fn qspin_yield(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
 /// Accepts: `{ "n_dots": u32, "platform": str, "si_fraction_mean": f64,
 ///             "si_fraction_std": f64, "n_samples": u32,
 ///             "interface_width_nm": f64, "threshold_uev": f64 }`.
+/// POST /qspin/crosstalk — silicon-spin crosstalk budget (residual exchange + capacitive).
+async fn qspin_crosstalk(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    let ex = req.get("exchange_residual_mhz").and_then(|v| v.as_f64()).unwrap_or(0.05);
+    let cf = req.get("capacitive_crosstalk_fraction").and_then(|v| v.as_f64()).unwrap_or(0.02);
+    let gs = req.get("gate_freq_shift_mhz").and_then(|v| v.as_f64()).unwrap_or(10.0);
+    let gt = req.get("gate_time_ns").and_then(|v| v.as_f64()).unwrap_or(50.0);
+    let a_ex = format!("--exchange-residual-mhz={ex}");
+    let a_cf = format!("--capacitive-crosstalk-fraction={cf}");
+    let a_gs = format!("--gate-freq-shift-mhz={gs}");
+    let a_gt = format!("--gate-time-ns={gt}");
+    let result = run_tool("qspin", &["crosstalk", "--json", &a_ex, &a_cf, &a_gs, &a_gt])?;
+    Ok(Json(result))
+}
+
+/// POST /qion/crosstalk — trapped-ion crosstalk budget (mode-mediated ZZ + Stark).
+async fn qion_crosstalk(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    let gr = req.get("gate_rabi_khz").and_then(|v| v.as_f64()).unwrap_or(50.0);
+    let gd = req.get("gate_detuning_khz").and_then(|v| v.as_f64()).unwrap_or(200.0);
+    let ni = req.get("n_ions").and_then(as_u64_loose).unwrap_or(5);
+    let af = req.get("addressing_crosstalk_fraction").and_then(|v| v.as_f64()).unwrap_or(0.01);
+    let cr = req.get("carrier_rabi_khz").and_then(|v| v.as_f64()).unwrap_or(500.0);
+    let gt = req.get("gate_time_us").and_then(|v| v.as_f64()).unwrap_or(100.0);
+    let a_gr = format!("--gate-rabi-khz={gr}");
+    let a_gd = format!("--gate-detuning-khz={gd}");
+    let a_ni = format!("--n-ions={ni}");
+    let a_af = format!("--addressing-crosstalk-fraction={af}");
+    let a_cr = format!("--carrier-rabi-khz={cr}");
+    let a_gt = format!("--gate-time-us={gt}");
+    let result = run_tool("qion", &["crosstalk", "--json", &a_gr, &a_gd, &a_ni, &a_af, &a_cr, &a_gt])?;
+    Ok(Json(result))
+}
+
+/// POST /qatom/crosstalk — neutral-atom crosstalk budget (Rydberg vdW + addressing).
+async fn qatom_crosstalk(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    let sp = req.get("spacing_um").and_then(|v| v.as_f64()).unwrap_or(5.0);
+    let c6 = req.get("c6_ghz_um6").and_then(|v| v.as_f64()).unwrap_or(138.0);
+    let aw = req.get("addressing_waist_um").and_then(|v| v.as_f64()).unwrap_or(1.5);
+    let gr = req.get("gate_rabi_mhz").and_then(|v| v.as_f64()).unwrap_or(5.0);
+    let gt = req.get("gate_time_us").and_then(|v| v.as_f64()).unwrap_or(0.5);
+    let a_sp = format!("--spacing-um={sp}");
+    let a_c6 = format!("--c6-ghz-um6={c6}");
+    let a_aw = format!("--addressing-waist-um={aw}");
+    let a_gr = format!("--gate-rabi-mhz={gr}");
+    let a_gt = format!("--gate-time-us={gt}");
+    let result = run_tool("qatom", &["crosstalk", "--json", &a_sp, &a_c6, &a_aw, &a_gr, &a_gt])?;
+    Ok(Json(result))
+}
+
 /// POST /qspin/readout — silicon-spin single-shot readout budget (spin-to-charge).
 async fn qspin_readout(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
     let t1_us = req.get("t1_us").and_then(|v| v.as_f64()).unwrap_or(10000.0);
@@ -5875,6 +5923,7 @@ fn build_router() -> Router {
         .route("/qatom/zone-layout", post(qatom_zone_layout))
         .route("/qatom/coherence", post(qatom_coherence))
         .route("/qatom/readout", post(qatom_readout))
+        .route("/qatom/crosstalk", post(qatom_crosstalk))
         // rustypulse-qec
         .route("/pqec/health", get(pqec_health))
         .route("/pqec/assess", post(pqec_assess))
@@ -5891,6 +5940,7 @@ fn build_router() -> Router {
         .route("/qspin/valley-split", post(qspin_valley_split))
         .route("/qspin/coherence", post(qspin_coherence))
         .route("/qspin/readout", post(qspin_readout))
+        .route("/qspin/crosstalk", post(qspin_crosstalk))
         // rustyqion
         .route("/qion/health", get(qion_health))
         .route("/qion/design", post(qion_design))
@@ -5900,6 +5950,7 @@ fn build_router() -> Router {
         .route("/qion/schedule", post(qion_schedule))
         .route("/qion/coherence", post(qion_coherence))
         .route("/qion/readout", post(qion_readout))
+        .route("/qion/crosstalk", post(qion_crosstalk))
         // rustybosonic
         .route("/bosonic/health", get(bosonic_health))
         .route("/bosonic/simulate", post(bosonic_simulate))
