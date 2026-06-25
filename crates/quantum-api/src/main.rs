@@ -3068,6 +3068,63 @@ async fn qspin_yield(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
 /// Accepts: `{ "n_dots": u32, "platform": str, "si_fraction_mean": f64,
 ///             "si_fraction_std": f64, "n_samples": u32,
 ///             "interface_width_nm": f64, "threshold_uev": f64 }`.
+/// POST /qspin/coherence — silicon-spin coherence budget (T1/T2*/T2-echo by channel).
+async fn qspin_coherence(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    let g_factor = req.get("g_factor").and_then(|v| v.as_f64()).unwrap_or(2.0);
+    let b_field_t = req.get("b_field_t").and_then(|v| v.as_f64()).unwrap_or(0.5);
+    let charge_noise_uev = req.get("charge_noise_uev").and_then(|v| v.as_f64()).unwrap_or(2.0);
+    let magnetic_noise_ut = req.get("magnetic_noise_ut").and_then(|v| v.as_f64()).unwrap_or(0.1);
+    let si29_fraction = req.get("si29_fraction").and_then(|v| v.as_f64()).unwrap_or(0.047);
+    let valley_splitting_uev = req.get("valley_splitting_uev").and_then(|v| v.as_f64()).unwrap_or(50.0);
+    let a_g = format!("--g-factor={g_factor}");
+    let a_b = format!("--b-field-t={b_field_t}");
+    let a_c = format!("--charge-noise-uev={charge_noise_uev}");
+    let a_m = format!("--magnetic-noise-ut={magnetic_noise_ut}");
+    let a_s = format!("--si29-fraction={si29_fraction}");
+    let a_v = format!("--valley-splitting-uev={valley_splitting_uev}");
+    let result = run_tool("qspin", &["coherence", "--json", &a_g, &a_b, &a_c, &a_m, &a_s, &a_v])?;
+    Ok(Json(result))
+}
+
+/// POST /qion/coherence — trapped-ion coherence budget (T1/T2*/T2-echo by channel).
+async fn qion_coherence(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    let species = req.get("species").and_then(|v| v.as_str()).unwrap_or("yb171").to_string();
+    let sens = req.get("magnetic_sensitivity_hz_per_nt").and_then(|v| v.as_f64()).unwrap_or(13.996);
+    let noise = req.get("magnetic_noise_nt").and_then(|v| v.as_f64()).unwrap_or(1.0);
+    let laser = req.get("laser_linewidth_hz").and_then(|v| v.as_f64()).unwrap_or(1.0);
+    let heating = req.get("heating_quanta_per_s").and_then(|v| v.as_f64()).unwrap_or(100.0);
+    let a_sp = format!("--species={species}");
+    let a_se = format!("--magnetic-sensitivity-hz-per-nt={sens}");
+    let a_no = format!("--magnetic-noise-nt={noise}");
+    let a_la = format!("--laser-linewidth-hz={laser}");
+    let a_he = format!("--heating-quanta-per-s={heating}");
+    let result = run_tool("qion", &["coherence", "--json", &a_sp, &a_se, &a_no, &a_la, &a_he])?;
+    Ok(Json(result))
+}
+
+/// POST /qatom/coherence — neutral-atom coherence budget (T1/T2*/T2-echo by channel).
+async fn qatom_coherence(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    let n_principal = req.get("n_principal").and_then(as_u64_loose).unwrap_or(60);
+    let temperature_uk = req.get("temperature_uk").and_then(|v| v.as_f64()).unwrap_or(10.0);
+    let bbr_temperature_k = req.get("bbr_temperature_k").and_then(|v| v.as_f64()).unwrap_or(300.0);
+    let vacuum_lifetime_s = req.get("vacuum_lifetime_s").and_then(|v| v.as_f64()).unwrap_or(10.0);
+    let magnetic_noise_mg = req.get("magnetic_noise_mg").and_then(|v| v.as_f64()).unwrap_or(1.0);
+    let laser_tphi_us = req.get("laser_tphi_us").and_then(|v| v.as_f64()).unwrap_or(500.0);
+    let ground_state = req.get("ground_state").and_then(|v| v.as_bool()).unwrap_or(false);
+    let a_n = format!("--n-principal={n_principal}");
+    let a_t = format!("--temperature-uk={temperature_uk}");
+    let a_bbr = format!("--bbr-temperature-k={bbr_temperature_k}");
+    let a_vac = format!("--vacuum-lifetime-s={vacuum_lifetime_s}");
+    let a_mag = format!("--magnetic-noise-mg={magnetic_noise_mg}");
+    let a_las = format!("--laser-tphi-us={laser_tphi_us}");
+    let mut args: Vec<&str> = vec!["coherence", "--json", &a_n, &a_t, &a_bbr, &a_vac, &a_mag, &a_las];
+    if ground_state {
+        args.push("--ground-state");
+    }
+    let result = run_tool("qatom", &args)?;
+    Ok(Json(result))
+}
+
 async fn qspin_valley_split(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
     let n_dots             = req.get("n_dots").and_then(as_u64_loose).unwrap_or(6);
     let platform           = req.get("platform").and_then(|v| v.as_str()).unwrap_or("sige").to_string();
@@ -5762,6 +5819,7 @@ fn build_router() -> Router {
         .route("/qatom/loading", post(qatom_loading))
         .route("/qatom/multi-gate", post(qatom_multi_gate))
         .route("/qatom/zone-layout", post(qatom_zone_layout))
+        .route("/qatom/coherence", post(qatom_coherence))
         // rustypulse-qec
         .route("/pqec/health", get(pqec_health))
         .route("/pqec/assess", post(pqec_assess))
@@ -5776,6 +5834,7 @@ fn build_router() -> Router {
         .route("/qspin/fab", post(qspin_fab))
         .route("/qspin/yield", post(qspin_yield))
         .route("/qspin/valley-split", post(qspin_valley_split))
+        .route("/qspin/coherence", post(qspin_coherence))
         // rustyqion
         .route("/qion/health", get(qion_health))
         .route("/qion/design", post(qion_design))
@@ -5783,6 +5842,7 @@ fn build_router() -> Router {
         .route("/qion/modes", post(qion_modes))
         .route("/qion/cooling", post(qion_cooling))
         .route("/qion/schedule", post(qion_schedule))
+        .route("/qion/coherence", post(qion_coherence))
         // rustybosonic
         .route("/bosonic/health", get(bosonic_health))
         .route("/bosonic/simulate", post(bosonic_simulate))
