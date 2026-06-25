@@ -3068,6 +3068,60 @@ async fn qspin_yield(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
 /// Accepts: `{ "n_dots": u32, "platform": str, "si_fraction_mean": f64,
 ///             "si_fraction_std": f64, "n_samples": u32,
 ///             "interface_width_nm": f64, "threshold_uev": f64 }`.
+/// POST /qspin/readout — silicon-spin single-shot readout budget (spin-to-charge).
+async fn qspin_readout(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    let t1_us = req.get("t1_us").and_then(|v| v.as_f64()).unwrap_or(10000.0);
+    let readout_time_us = req.get("readout_time_us").and_then(|v| v.as_f64()).unwrap_or(100.0);
+    let sensor_snr = req.get("sensor_snr").and_then(|v| v.as_f64()).unwrap_or(5.0);
+    let electron_temp_mk = req.get("electron_temp_mk").and_then(|v| v.as_f64()).unwrap_or(100.0);
+    let b_field_t = req.get("b_field_t").and_then(|v| v.as_f64()).unwrap_or(0.5);
+    let g_factor = req.get("g_factor").and_then(|v| v.as_f64()).unwrap_or(2.0);
+    let tunnel_rate_khz = req.get("tunnel_rate_khz").and_then(|v| v.as_f64()).unwrap_or(100.0);
+    let a_t = format!("--t1-us={t1_us}");
+    let a_r = format!("--readout-time-us={readout_time_us}");
+    let a_s = format!("--sensor-snr={sensor_snr}");
+    let a_e = format!("--electron-temp-mk={electron_temp_mk}");
+    let a_b = format!("--b-field-t={b_field_t}");
+    let a_g = format!("--g-factor={g_factor}");
+    let a_k = format!("--tunnel-rate-khz={tunnel_rate_khz}");
+    let result = run_tool("qspin", &["readout", "--json", &a_t, &a_r, &a_s, &a_e, &a_b, &a_g, &a_k])?;
+    Ok(Json(result))
+}
+
+/// POST /qion/readout — trapped-ion single-shot readout budget (fluorescence).
+async fn qion_readout(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    let species = req.get("species").and_then(|v| v.as_str()).unwrap_or("yb171").to_string();
+    let ce = req.get("collection_efficiency").and_then(|v| v.as_f64()).unwrap_or(0.03);
+    let sr = req.get("scatter_rate_mhz").and_then(|v| v.as_f64()).unwrap_or(20.0);
+    let dt = req.get("detection_time_us").and_then(|v| v.as_f64()).unwrap_or(200.0);
+    let dc = req.get("dark_count_rate_khz").and_then(|v| v.as_f64()).unwrap_or(1.0);
+    let dp = req.get("depumping_time_ms").and_then(|v| v.as_f64()).unwrap_or(100.0);
+    let a_sp = format!("--species={species}");
+    let a_ce = format!("--collection-efficiency={ce}");
+    let a_sr = format!("--scatter-rate-mhz={sr}");
+    let a_dt = format!("--detection-time-us={dt}");
+    let a_dc = format!("--dark-count-rate-khz={dc}");
+    let a_dp = format!("--depumping-time-ms={dp}");
+    let result = run_tool("qion", &["readout", "--json", &a_sp, &a_ce, &a_sr, &a_dt, &a_dc, &a_dp])?;
+    Ok(Json(result))
+}
+
+/// POST /qatom/readout — neutral-atom single-shot readout budget (fluorescence imaging).
+async fn qatom_readout(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    let ce = req.get("collection_efficiency").and_then(|v| v.as_f64()).unwrap_or(0.1);
+    let sr = req.get("scatter_rate_mhz").and_then(|v| v.as_f64()).unwrap_or(30.0);
+    let it = req.get("imaging_time_us").and_then(|v| v.as_f64()).unwrap_or(20.0);
+    let bg = req.get("background_rate_khz").and_then(|v| v.as_f64()).unwrap_or(10.0);
+    let al = req.get("atom_loss_rate_khz").and_then(|v| v.as_f64()).unwrap_or(1.0);
+    let a_ce = format!("--collection-efficiency={ce}");
+    let a_sr = format!("--scatter-rate-mhz={sr}");
+    let a_it = format!("--imaging-time-us={it}");
+    let a_bg = format!("--background-rate-khz={bg}");
+    let a_al = format!("--atom-loss-rate-khz={al}");
+    let result = run_tool("qatom", &["readout", "--json", &a_ce, &a_sr, &a_it, &a_bg, &a_al])?;
+    Ok(Json(result))
+}
+
 /// POST /qspin/coherence — silicon-spin coherence budget (T1/T2*/T2-echo by channel).
 async fn qspin_coherence(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
     let g_factor = req.get("g_factor").and_then(|v| v.as_f64()).unwrap_or(2.0);
@@ -5820,6 +5874,7 @@ fn build_router() -> Router {
         .route("/qatom/multi-gate", post(qatom_multi_gate))
         .route("/qatom/zone-layout", post(qatom_zone_layout))
         .route("/qatom/coherence", post(qatom_coherence))
+        .route("/qatom/readout", post(qatom_readout))
         // rustypulse-qec
         .route("/pqec/health", get(pqec_health))
         .route("/pqec/assess", post(pqec_assess))
@@ -5835,6 +5890,7 @@ fn build_router() -> Router {
         .route("/qspin/yield", post(qspin_yield))
         .route("/qspin/valley-split", post(qspin_valley_split))
         .route("/qspin/coherence", post(qspin_coherence))
+        .route("/qspin/readout", post(qspin_readout))
         // rustyqion
         .route("/qion/health", get(qion_health))
         .route("/qion/design", post(qion_design))
@@ -5843,6 +5899,7 @@ fn build_router() -> Router {
         .route("/qion/cooling", post(qion_cooling))
         .route("/qion/schedule", post(qion_schedule))
         .route("/qion/coherence", post(qion_coherence))
+        .route("/qion/readout", post(qion_readout))
         // rustybosonic
         .route("/bosonic/health", get(bosonic_health))
         .route("/bosonic/simulate", post(bosonic_simulate))
