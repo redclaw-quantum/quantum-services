@@ -1,0 +1,34 @@
+[pipeline]
+name = "fab-to-recalibration"
+version = "1.0"
+description = "Post-fab metrology ingestion → digital twin compare + recalibration + QEC reassessment (closes the design→fab→measure loop)"
+max_concurrency = 2
+default_timeout_secs = 120
+
+[pipeline.output]
+stage = "metrology_ingest"
+field = "summary"
+artifact_key = "twin_{run_id}"
+
+# ── Stage 1: Metrology ingestion ─────────────────────────────────────────────
+# Supply the run params `measurement` (a CryoMeasurementRecord from the fridge
+# run) and `design` (the OQFP spec or DesignSpec from the forward flow). The
+# stage converts the record → MeasuredSpec, compares against the design, and
+# returns the digital twin + recalibration suggestions.
+
+[[stage]]
+id = "metrology_ingest"
+type = "metrology_ingest"
+depends_on = []
+timeout_secs = 30
+
+# ── Stage 2: QEC reassessment against the measured twin ──────────────────────
+
+[[stage]]
+id = "qec_reassess"
+type = "twin_qec_update"
+depends_on = ["metrology_ingest"]
+timeout_secs = 30
+
+[stage.params]
+code = "surface"

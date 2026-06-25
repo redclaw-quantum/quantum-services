@@ -388,6 +388,36 @@ async fn qtwin_compare(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
     Ok(Json(result))
 }
 
+/// POST /qtwin/ingest — ingest a raw cryo-measurement record, compare it against
+/// the design (DesignSpec or OQFP spec), and (by default) emit recalibration
+/// suggestions. Body: { measurement: <CryoMeasurementRecord>, design: <spec>,
+/// recalibrate?: bool }.
+async fn qtwin_ingest(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    let measurement = req.get("measurement").cloned().ok_or_else(|| {
+        ApiError(anyhow::anyhow!("qtwin/ingest: missing `measurement` (CryoMeasurementRecord)"))
+    })?;
+    let design = req.get("design").cloned().ok_or_else(|| {
+        ApiError(anyhow::anyhow!("qtwin/ingest: missing `design` (DesignSpec or OQFP spec)"))
+    })?;
+    let recalibrate = req.get("recalibrate").and_then(|v| v.as_bool()).unwrap_or(true);
+
+    let meas_f = write_temp_json(&measurement)?;
+    let design_f = write_temp_json(&design)?;
+    let mut args = vec![
+        "ingest",
+        "--measurement",
+        meas_f.path().to_str().unwrap(),
+        "--design",
+        design_f.path().to_str().unwrap(),
+        "--json",
+    ];
+    if recalibrate {
+        args.push("--recalibrate");
+    }
+    let result = run_tool("qtwin", &args)?;
+    Ok(Json(result))
+}
+
 async fn qtwin_recalibrate(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
     let twin = resolve_twin_input(&req).ok_or_else(|| {
         ApiError(anyhow::anyhow!("qtwin/recalibrate: no `twin` field and no upstream stage output looks like a TwinState"))
@@ -5565,6 +5595,7 @@ fn build_router() -> Router {
         // qtwin
         .route("/qtwin/compare", post(qtwin_compare))
         .route("/qtwin/:chip/compare", get(qtwin_compare_chip))
+        .route("/qtwin/ingest", post(qtwin_ingest))
         .route("/qtwin/recalibrate", post(qtwin_recalibrate))
         .route("/qtwin/qec-update", post(qtwin_qec_update))
         .route("/qtwin/mock", post(qtwin_mock))

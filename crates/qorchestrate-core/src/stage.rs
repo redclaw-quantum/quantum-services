@@ -82,6 +82,9 @@ pub enum StageType {
     TwinRecalibrate,
     TwinQecUpdate,
     TwinMock,
+    /// Ingest a raw cryo-measurement record → compare against the design →
+    /// digital twin + recalibration (metrology ingestion, post-fab loop).
+    MetrologyIngest,
     BenchPredict,
     QexplorePareto,
     FreqYield,
