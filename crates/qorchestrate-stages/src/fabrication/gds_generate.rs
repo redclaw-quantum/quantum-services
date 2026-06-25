@@ -92,6 +92,13 @@ fn chip_params_from_input(input: &Value) -> Value {
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
     obj.insert("tapeout_frame".to_string(), json!(frame));
+
+    // Dummy fill (CMP / etch-loading uniformity): on by default for the pipeline.
+    let fill = input
+        .get("dummy_fill")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+    obj.insert("dummy_fill".to_string(), json!(fill));
     params
 }
 

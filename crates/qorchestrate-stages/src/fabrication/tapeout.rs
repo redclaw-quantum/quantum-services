@@ -215,6 +215,8 @@ impl Stage for TapeoutPackageStage {
                 "layer_map": gds.get("layer_map").cloned().unwrap_or(Value::Null),
                 "layer_table": gds.get("layer_table").cloned().unwrap_or(Value::Null),
                 "frame": gds.get("tapeout_frame").cloned().unwrap_or(Value::Null),
+                "dummy_fill_tiles": gds.get("dummy_fill_tiles").cloned().unwrap_or(Value::Null),
+                "job_deck": gds.get("job_deck").cloned().unwrap_or(Value::Null),
             },
             "test_plan": test_plan,
         });
