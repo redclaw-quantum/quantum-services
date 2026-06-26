@@ -100,6 +100,14 @@ pub enum StageType {
     /// Black-Box Quantization: S-parameters → Hamiltonian (E_J/E_C/g/χ) via
     /// Foster synthesis. Consumes QemSweep's `s_parameters`.
     BbqQuantize,
+    /// Parasitic CPW capacitance/inductance extraction.
+    ExtractCpw,
+    /// TLS-limited T1 prediction from participation + dielectric loss.
+    ExtractTls,
+    /// clawprint dressed-state / PTM gate metrics (χ, sidebands).
+    ClawprintDressed,
+    /// Firmware compile: circuit → pulse schedule (OpenPulse).
+    FwCompile,
     BenchPredict,
     QexplorePareto,
     FreqYield,

@@ -43,3 +43,37 @@ id = "modes"
 type = "http_post"
 depends_on = ["design"]
 params = { path = "/qion/modes", ions = 5, trap_freq = 3.0, species = "ca40" }
+
+# ── Physics budget: coherence / readout / crosstalk / frequency / pulse ───────
+# Assembles a full SC-parity physics budget (was reachable only as standalone
+# endpoints; now chained into the pipeline).
+
+[[stage]]
+id = "coherence"
+type = "http_post"
+depends_on = ["design"]
+params = { path = "/qion/coherence", species = "ca40" }
+
+[[stage]]
+id = "readout"
+type = "http_post"
+depends_on = ["design"]
+params = { path = "/qion/readout", species = "ca40" }
+
+[[stage]]
+id = "crosstalk"
+type = "http_post"
+depends_on = ["design"]
+params = { path = "/qion/crosstalk" }
+
+[[stage]]
+id = "frequency"
+type = "http_post"
+depends_on = ["design"]
+params = { path = "/qion/frequency" }
+
+[[stage]]
+id = "pulse"
+type = "http_post"
+depends_on = ["design"]
+params = { path = "/qion/pulse" }
