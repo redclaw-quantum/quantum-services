@@ -6,6 +6,19 @@ use qorchestrate_core::{
     stage::{Stage, StageContext, StageType},
 };
 
+/// Average a JSON value that is either a number or an array of numbers.
+fn avg_num(v: &Value) -> Option<f64> {
+    if let Some(n) = v.as_f64() {
+        return Some(n);
+    }
+    let nums: Vec<f64> = v.as_array()?.iter().filter_map(|x| x.as_f64()).collect();
+    if nums.is_empty() {
+        None
+    } else {
+        Some(nums.iter().sum::<f64>() / nums.len() as f64)
+    }
+}
+
 pub struct OqfpBuildStage;
 
 impl OqfpBuildStage {
@@ -77,6 +90,50 @@ impl Stage for OqfpBuildStage {
             .unwrap_or(Value::Null);
         let jeval = recipe_out.get("eval").cloned().unwrap_or(Value::Null);
 
+        // ── derive control / wiring / performance values from upstream outputs ──
+        let n_qubits = gds
+            .get("num_qubits")
+            .and_then(|v| v.as_u64())
+            .or_else(|| scq.get("t1_us").and_then(|v| v.as_array()).map(|a| a.len() as u64))
+            .unwrap_or(4);
+        let avg_t1 = scq.get("t1_us").and_then(avg_num);
+        let avg_t2 = scq.get("t2_us").and_then(avg_num);
+        let gate_fid_1q = pulse.get("fidelity").and_then(|v| v.as_f64());
+        let gate_dur_1q = pulse.get("duration_ns").and_then(|v| v.as_f64()).unwrap_or(30.0);
+        let pulse_shape = pulse
+            .get("pulse_shape")
+            .and_then(|v| v.as_str())
+            .unwrap_or("DRAG")
+            .to_string();
+        let gate_fid_2q = xtalk
+            .get("cr_gate")
+            .and_then(|c| c.get("fidelity"))
+            .and_then(|v| v.as_f64())
+            .or_else(|| gate_fid_1q.map(|f| f * f)) // rough 2q ≈ 1q²
+            .unwrap_or(0.99);
+        let readout_fid = readout
+            .get("readout_fidelity")
+            .and_then(|v| v.as_f64())
+            .or_else(|| {
+                readout
+                    .get("metrics")
+                    .and_then(|m| m.get("assignment_fidelity"))
+                    .and_then(|v| v.as_f64())
+            })
+            .unwrap_or(0.99);
+        let first_freq = freq_plan
+            .get("assignments")
+            .and_then(|a| a.as_array())
+            .and_then(|a| a.first())
+            .and_then(|q| q.get("frequency_ghz").or_else(|| q.get("freq_ghz")))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(5.0);
+        let fridge_model = input
+            .get("fridge_model")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Bluefors LD400")
+            .to_string();
+
         let oqfp = json!({
             "oqfp_version": "1.0",
             "layers": {
@@ -102,8 +159,20 @@ impl Stage for OqfpBuildStage {
                     "max_achievable_distance": qec.get("max_achievable_distance").cloned().unwrap_or(json!(3)),
                 },
                 "control": {
-                    "pulse_shape": pulse.get("pulse_shape").cloned().unwrap_or(json!("DRAG")),
-                    "gate_fidelity": pulse.get("fidelity").cloned().unwrap_or(Value::Null),
+                    "native_gates": ["id", "rz", "sx", "x", "cz"],
+                    "pulse_shape": pulse_shape,
+                    "gate_fidelity": gate_fid_1q,
+                    "gate_library": [
+                        {"name": "x",  "qubits": [], "pulse_shape": pulse_shape, "duration_ns": gate_dur_1q, "fidelity": gate_fid_1q},
+                        {"name": "sx", "qubits": [], "pulse_shape": pulse_shape, "duration_ns": gate_dur_1q, "fidelity": gate_fid_1q},
+                        {"name": "cz", "qubits": [], "pulse_shape": "GaussianSquare", "duration_ns": gate_dur_1q * 4.0, "fidelity": gate_fid_2q},
+                    ],
+                    "calibration_targets": [
+                        {"parameter": "qubit_frequency_ghz", "target_value": first_freq, "tolerance": 0.005},
+                        {"parameter": "t1_us", "target_value": avg_t1, "tolerance": 10.0},
+                        {"parameter": "t2_us", "target_value": avg_t2, "tolerance": 10.0},
+                        {"parameter": "readout_fidelity", "target_value": readout_fid, "tolerance": 0.005},
+                    ],
                     "readout": readout,
                 },
                 "fabrication": {
@@ -118,13 +187,27 @@ impl Stage for OqfpBuildStage {
                     "num_qubits": gds.get("num_qubits").cloned().unwrap_or(Value::Null),
                     "drc_clean": drc.get("clean").cloned().unwrap_or(Value::Null),
                     "drc_num_violations": drc.get("num_violations").cloned().unwrap_or(Value::Null),
+                    "fracture": gds.get("fracture").cloned().unwrap_or(Value::Null),
+                    "wiring": {
+                        // Cryostat harness: a drive + readout + flux line per qubit.
+                        "fridge_model": fridge_model,
+                        "signal_lines": n_qubits * 3,
+                        "thermal_budget_ok": n_qubits <= 1000,
+                    },
                 },
                 "performance": {
                     "quantum_volume": bench.get("quantum_volume").cloned().unwrap_or(Value::Null),
                     "clops": bench.get("clops").cloned().unwrap_or(Value::Null),
                     "logical_error_rate": qec.get("logical_error_rate").cloned().unwrap_or(Value::Null),
+                    "avg_t1_us": avg_t1,
+                    "avg_t2_us": avg_t2,
+                    "avg_2q_fidelity": gate_fid_2q,
+                    "avg_readout_fidelity": readout_fid,
                 },
-                "application": {}
+                "application": {
+                    "target_use_case": input.get("target_use_case").cloned().unwrap_or(json!("general_purpose")),
+                    "logical_qubits_required": input.get("logical_qubits_required").cloned().unwrap_or(Value::Null),
+                }
             }
         });
 
