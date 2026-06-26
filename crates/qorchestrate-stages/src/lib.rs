@@ -380,6 +380,47 @@ mod tests {
         }
     }
 
+    // ── 2a. OqfpBuildStage populates control / wiring / performance layers ────
+
+    #[tokio::test]
+    async fn test_oqfp_build_enriched_layers() {
+        let stage = oqfp::build::OqfpBuildStage::new();
+        let ctx = test_ctx();
+        let input = json!({
+            "freq_plan_output": { "assignments": [{"qubit": 0, "frequency_ghz": 5.1}], "yield_estimate": 0.8 },
+            "scq_device_output": { "t1_us": [90.0, 110.0], "t2_us": [70.0, 80.0] },
+            "pulse_optimize_output": { "pulse_shape": "DRAG", "duration_ns": 25.0, "fidelity": 0.9991 },
+            "readout_design_output": { "readout_fidelity": 0.992 },
+            "gds_generate_output": { "num_qubits": 8 },
+        });
+        let out = stage.execute_raw(input, &ctx).await.unwrap();
+        let layers = out.get("oqfp_spec").unwrap().get("layers").unwrap();
+
+        // Control: native gates + gate library + calibration targets.
+        let control = layers.get("control").unwrap();
+        assert_eq!(control.get("native_gates").unwrap().as_array().unwrap().len(), 5);
+        let lib = control.get("gate_library").unwrap().as_array().unwrap();
+        assert_eq!(lib.len(), 3);
+        assert_eq!(lib[0].get("name").unwrap(), &json!("x"));
+        assert_eq!(lib[0].get("fidelity").unwrap(), &json!(0.9991));
+        assert!(control.get("calibration_targets").unwrap().as_array().unwrap()
+            .iter().any(|c| c.get("parameter").unwrap() == &json!("t1_us")));
+
+        // Fabrication wiring: a drive + readout + flux line per qubit.
+        let wiring = layers.get("fabrication").unwrap().get("wiring").unwrap();
+        assert_eq!(wiring.get("signal_lines").unwrap(), &json!(24)); // 8 qubits × 3
+        assert_eq!(wiring.get("thermal_budget_ok").unwrap(), &json!(true));
+
+        // Performance averages from scq / readout.
+        let perf = layers.get("performance").unwrap();
+        assert_eq!(perf.get("avg_t1_us").unwrap(), &json!(100.0)); // avg(90, 110)
+        assert_eq!(perf.get("avg_t2_us").unwrap(), &json!(75.0)); // avg(70, 80)
+        assert_eq!(perf.get("avg_readout_fidelity").unwrap(), &json!(0.992));
+
+        // Application present.
+        assert!(layers.get("application").unwrap().get("target_use_case").is_some());
+    }
+
     // ── 2b. OqfpBuildStage populates fabrication layer from GDS + DRC ────────
 
     #[tokio::test]
