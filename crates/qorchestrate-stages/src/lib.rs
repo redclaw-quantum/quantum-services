@@ -196,6 +196,16 @@ pub fn register_standard_stages(registry: &mut StageRegistry) {
     // of needing a hand-written stage struct per endpoint. See the §4.7
     // follow-up⁴ note in quantum-consolidation-audit.md.
 
+    // Previously-phantom meta stages (enum variants with no impl), now real.
+    registry.register(
+        StageType::FailureModeAnalysis,
+        Arc::new(meta::failure_mode::FailureModeAnalysisStage::new()),
+    );
+    registry.register(
+        StageType::Clawhdf5Save,
+        Arc::new(meta::clawhdf5_save::Clawhdf5SaveStage::new()),
+    );
+
     // Generic, table-driven capability stages (extract / clawprint / fw …):
     // each row in generic::TOOL_STAGES becomes a first-class named stage.
     for (stage_type, path) in generic::TOOL_STAGES {
@@ -300,6 +310,9 @@ mod tests {
         assert!(registry.has(&StageType::ExtractTls));
         assert!(registry.has(&StageType::ClawprintDressed));
         assert!(registry.has(&StageType::FwCompile));
+        // Phase 4: previously-phantom stages now implemented + registered.
+        assert!(registry.has(&StageType::FailureModeAnalysis));
+        assert!(registry.has(&StageType::Clawhdf5Save));
         assert!(registry.has(&StageType::QpudidpRmflow));
         assert!(registry.has(&StageType::QpudidpCmaes));
         assert!(registry.has(&StageType::QemSolve));
