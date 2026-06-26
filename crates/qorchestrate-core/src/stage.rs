@@ -94,6 +94,12 @@ pub enum StageType {
     /// QPUDIDP inverse design *seeded by each hint* (targeted re-design — the loop
     /// closer, vs a blanket whole-chip rerun).
     RecalDispatch,
+    /// Driven-modal frequency sweep on a geometry → S-parameters (the HFSS
+    /// driven-modal equivalent; feeds BbqQuantize).
+    QemSweep,
+    /// Black-Box Quantization: S-parameters → Hamiltonian (E_J/E_C/g/χ) via
+    /// Foster synthesis. Consumes QemSweep's `s_parameters`.
+    BbqQuantize,
     BenchPredict,
     QexplorePareto,
     FreqYield,
