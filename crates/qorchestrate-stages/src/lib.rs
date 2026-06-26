@@ -3,6 +3,7 @@ pub mod bench;
 pub mod chip;
 pub mod explore;
 pub mod fabrication;
+pub mod generic;
 pub mod meta;
 pub mod oqfp;
 pub mod physics;
@@ -194,6 +195,15 @@ pub fn register_standard_stages(registry: &mut StageRegistry) {
     // declares `type = "http_post", params.path = "/q<mod>/<op>"` instead
     // of needing a hand-written stage struct per endpoint. See the §4.7
     // follow-up⁴ note in quantum-consolidation-audit.md.
+
+    // Generic, table-driven capability stages (extract / clawprint / fw …):
+    // each row in generic::TOOL_STAGES becomes a first-class named stage.
+    for (stage_type, path) in generic::TOOL_STAGES {
+        registry.register(
+            stage_type.clone(),
+            std::sync::Arc::new(generic::ToolStage::new(stage_type.clone(), path)),
+        );
+    }
 }
 
 /// Register meta stages that need to dispatch sub-pipelines through the
@@ -282,6 +292,14 @@ mod tests {
         assert!(registry.has(&StageType::TapeoutPackage));
         assert!(registry.has(&StageType::ProcessRecipe));
         assert!(registry.has(&StageType::Skip));
+        // Phase 1–2 plumbing: loop closer, qem→bbq bridge, generic tool stages.
+        assert!(registry.has(&StageType::RecalDispatch));
+        assert!(registry.has(&StageType::QemSweep));
+        assert!(registry.has(&StageType::BbqQuantize));
+        assert!(registry.has(&StageType::ExtractCpw));
+        assert!(registry.has(&StageType::ExtractTls));
+        assert!(registry.has(&StageType::ClawprintDressed));
+        assert!(registry.has(&StageType::FwCompile));
         assert!(registry.has(&StageType::QpudidpRmflow));
         assert!(registry.has(&StageType::QpudidpCmaes));
         assert!(registry.has(&StageType::QemSolve));

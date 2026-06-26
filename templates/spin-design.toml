@@ -50,3 +50,37 @@ id = "yield_est"
 type = "http_post"
 depends_on = ["design"]
 params = { path = "/qspin/yield", variation = 5.0, samples = 10000, remap = { design_output = "array" } }
+
+# ── Physics budget: coherence / readout / crosstalk / frequency / pulse ───────
+# Assembles a full SC-parity physics budget (was reachable only as standalone
+# endpoints; now chained into the pipeline).
+
+[[stage]]
+id = "coherence"
+type = "http_post"
+depends_on = ["design"]
+params = { path = "/qspin/coherence" }
+
+[[stage]]
+id = "readout"
+type = "http_post"
+depends_on = ["design"]
+params = { path = "/qspin/readout" }
+
+[[stage]]
+id = "crosstalk"
+type = "http_post"
+depends_on = ["design"]
+params = { path = "/qspin/crosstalk" }
+
+[[stage]]
+id = "frequency"
+type = "http_post"
+depends_on = ["design"]
+params = { path = "/qspin/frequency" }
+
+[[stage]]
+id = "pulse"
+type = "http_post"
+depends_on = ["design"]
+params = { path = "/qspin/pulse" }
