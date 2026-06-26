@@ -101,9 +101,12 @@ timeout_secs = 10
 # ── Stage 8: QEC threshold assessment ─────────────────────────────────────────
 
 [[stage]]
+# Depends on pulse_optimize (real optimized gate fidelity), scq_device (T1/T2),
+# and xtalk_analyze (gate-fidelity fallback when pulse optimization is skipped),
+# so the QEC assessment reflects the actual device — not hardcoded defaults.
 id = "qec_assess"
 type = "pqec_assess"
-depends_on = ["pulse_optimize"]
+depends_on = ["pulse_optimize", "scq_device", "xtalk_analyze"]
 timeout_secs = 60
 
 # ── Stage 9: Quantum volume / CLOPS benchmark prediction ──────────────────────
