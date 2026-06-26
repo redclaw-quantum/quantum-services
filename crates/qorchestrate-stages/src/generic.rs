@@ -71,8 +71,55 @@ impl Stage for ToolStage {
 /// The table of capability endpoints exposed as named pipeline stages.
 /// Add a `(StageType, endpoint_path)` row to make a capability first-class.
 pub const TOOL_STAGES: &[(StageType, &str)] = &[
+    // Parasitics / control / firmware (the previously orphaned capabilities)
     (StageType::ExtractCpw, "/extract/cpw"),
     (StageType::ExtractTls, "/extract/tls"),
     (StageType::ClawprintDressed, "/clawprint/dressed"),
     (StageType::FwCompile, "/qfw/compile"),
+    // Characterization
+    (StageType::BenchQv, "/bench/qv"),
+    (StageType::BenchRb, "/bench/rb"),
+    (StageType::CalRb, "/cal/rb"),
+    (StageType::CalSpectroscopy, "/cal/spectroscopy"),
+    (StageType::CalLeakageRb, "/cal/leakage-rb"),
+    // Meshing
+    (StageType::MeshTransmonCross, "/mesh/transmon-cross"),
+    (StageType::MeshChip, "/mesh/chip"),
+    (StageType::MeshQuality, "/mesh/quality"),
+    // Cryo wiring / packaging
+    (StageType::WiringDesign, "/wiring/design"),
+    (StageType::WiringNoise, "/wiring/noise"),
+    (StageType::PkgDesign, "/pkg/design"),
+    (StageType::PkgWirebonds, "/pkg/wirebonds"),
+    (StageType::CryoAnalyze, "/cryo/analyze"),
+    (StageType::CryoPower, "/cryo/power"),
+    // Bosonic / codesign / surgery / stim
+    (StageType::BosonicSimulate, "/bosonic/simulate"),
+    (StageType::BosonicOptimize, "/bosonic/optimize"),
+    (StageType::CodesignOptimize, "/codesign/optimize"),
+    (StageType::CodesignRoadmap, "/codesign/roadmap"),
+    (StageType::SurgeryCompile, "/surgery/compile"),
+    (StageType::StimGen, "/stim/gen"),
+    // Floquet / scq / readout / pulse
+    (StageType::FloquetSpectrum, "/floquet/spectrum"),
+    (StageType::FloquetPropagator, "/floquet/propagator"),
+    (StageType::ScqCoherence, "/scq/coherence"),
+    (StageType::ScqSpectrum, "/scq/spectrum"),
+    (StageType::ReadoutFidelity, "/readout/fidelity"),
+    (StageType::ReadoutMultiplex, "/readout/multiplex"),
+    (StageType::PulseSimulate, "/pulse/simulate"),
+    // Applications
+    (StageType::QchemMolecule, "/qchem/molecule"),
+    (StageType::QchemVqe, "/qchem/vqe"),
+    (StageType::QaoaMaxcut, "/qaoa/maxcut"),
+    (StageType::QaoaPortfolio, "/qaoa/portfolio"),
+    (StageType::QmlClassify, "/qml/classify"),
+    (StageType::QmlKernel, "/qml/kernel"),
+    (StageType::QnetEntangle, "/qnet/entangle"),
+    (StageType::QnetScale, "/qnet/scale"),
+    // Transpile / symbolic / viz
+    (StageType::TranspileCompile, "/transpile/compile"),
+    (StageType::SymclawSimplify, "/symclaw/simplify"),
+    (StageType::SymclawSolve, "/symclaw/solve"),
+    (StageType::ClawviewStreamlines, "/clawview/streamlines"),
 ];

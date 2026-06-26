@@ -108,6 +108,55 @@ pub enum StageType {
     ClawprintDressed,
     /// Firmware compile: circuit → pulse schedule (OpenPulse).
     FwCompile,
+    // ── Named capability stages (table-driven via ToolStage). Every POST
+    //    endpoint is already pipeline-reachable through `http_post`; these give
+    //    the meaningful capability groups a first-class, self-documenting name. ──
+    // Characterization
+    BenchQv,
+    BenchRb,
+    CalRb,
+    CalSpectroscopy,
+    CalLeakageRb,
+    // Meshing
+    MeshTransmonCross,
+    MeshChip,
+    MeshQuality,
+    // Cryo wiring / packaging
+    WiringDesign,
+    WiringNoise,
+    PkgDesign,
+    PkgWirebonds,
+    CryoAnalyze,
+    CryoPower,
+    // Bosonic / codesign / surgery
+    BosonicSimulate,
+    BosonicOptimize,
+    CodesignOptimize,
+    CodesignRoadmap,
+    SurgeryCompile,
+    StimGen,
+    // Floquet / scq / readout / xtalk / pulse
+    FloquetSpectrum,
+    FloquetPropagator,
+    ScqCoherence,
+    ScqSpectrum,
+    ReadoutFidelity,
+    ReadoutMultiplex,
+    PulseSimulate,
+    // Applications
+    QchemMolecule,
+    QchemVqe,
+    QaoaMaxcut,
+    QaoaPortfolio,
+    QmlClassify,
+    QmlKernel,
+    QnetEntangle,
+    QnetScale,
+    // Transpile / symbolic / viz
+    TranspileCompile,
+    SymclawSimplify,
+    SymclawSolve,
+    ClawviewStreamlines,
     BenchPredict,
     QexplorePareto,
     FreqYield,

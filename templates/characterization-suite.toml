@@ -1,0 +1,34 @@
+# characterization-suite.toml — Device characterization via named capability stages.
+#
+# Demonstrates the Phase-3 named ToolStage capability stages (quantum volume +
+# randomized benchmarking + interleaved RB) running as first-class pipeline
+# stages — rather than as raw `http_post` calls. Every quantum-api POST endpoint
+# remains reachable via `http_post` (see docs/stage-coverage.md); these named
+# stages exist for the meaningful capability groups.
+
+[pipeline]
+name = "characterization-suite"
+version = "1.0"
+description = "Quantum volume + randomized benchmarking characterization (named capability stages)"
+max_concurrency = 3
+default_timeout_secs = 120
+
+[pipeline.output]
+stage = "qv"
+field = "quantum_volume"
+artifact_key = "characterization_{run_id}"
+
+[[stage]]
+id = "qv"
+type = "bench_qv"
+depends_on = []
+
+[[stage]]
+id = "rb"
+type = "bench_rb"
+depends_on = []
+
+[[stage]]
+id = "interleaved_rb"
+type = "cal_rb"
+depends_on = []
