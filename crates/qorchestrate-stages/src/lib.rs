@@ -37,6 +37,14 @@ pub fn register_standard_stages(registry: &mut StageRegistry) {
         Arc::new(physics::qem_solve::QemSolveStage::new()),
     );
     registry.register(
+        StageType::QemSweep,
+        Arc::new(physics::qem_sweep::QemSweepStage::new()),
+    );
+    registry.register(
+        StageType::BbqQuantize,
+        Arc::new(physics::bbq_quantize::BbqQuantizeStage::new()),
+    );
+    registry.register(
         StageType::ScqSimulate,
         Arc::new(physics::scq_simulate::ScqSimulateStage::new()),
     );

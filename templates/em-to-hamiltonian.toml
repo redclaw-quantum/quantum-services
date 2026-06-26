@@ -1,0 +1,64 @@
+# em-to-hamiltonian.toml — Geometry → Hamiltonian, the fully-wired HFSS+BBQ path.
+#
+# Pipeline: inverse design (geometry) → qem driven-modal frequency sweep
+#   (S-parameters) → Black-Box Quantization (Foster synthesis → E_J/E_C/g/χ)
+#   → bridge to a qcirc HamiltonianSpec.
+#
+# This closes the qem → bbq bridge that previously required a manual hand-off:
+# the qem-driven `s_parameters` output is structurally identical to bbq's
+# `BbqSParams`, and the new `qem_sweep` + `bbq_quantize` stages chain them with
+# no converter. It is the FEM-driven front-end that `parametric-amp-design.toml`
+# left as a "future iteration" (it starts from pre-supplied S-parameters).
+#
+# Requires the qem-server (:8430) and QPUDIDP (:8420) reachable via quantum-api.
+
+[pipeline]
+name = "em-to-hamiltonian"
+version = "1.0"
+description = "Geometry → driven-modal S-parameters (qem) → Black-Box Quantization → Hamiltonian"
+max_concurrency = 2
+default_timeout_secs = 300
+
+[pipeline.output]
+stage = "bbq_to_qcirc"
+field = "hamiltonian_spec"
+artifact_key = "em_hamiltonian_{run_id}"
+
+# ── Stage 1: Inverse design → geometry candidate (warm start for the sweep) ───
+[[stage]]
+id = "inverse_design"
+type = "qpudidp_rmflow"
+depends_on = []
+timeout_secs = 15
+
+[stage.params]
+n_candidates = 5
+
+[stage.fallback]
+type = "qpudidp_cmaes"
+timeout_secs = 60
+
+# ── Stage 2: Driven-modal frequency sweep → S-parameters ──────────────────────
+[[stage]]
+id = "qem_sweep"
+type = "qem_sweep"
+depends_on = ["inverse_design"]
+timeout_secs = 120
+
+[stage.params]
+f_start_ghz = 4.0
+f_stop_ghz = 8.0
+
+# ── Stage 3: Black-Box Quantization → Hamiltonian (E_J/E_C/g/χ) ───────────────
+[[stage]]
+id = "bbq_quantize"
+type = "bbq_quantize"
+depends_on = ["qem_sweep"]
+timeout_secs = 60
+
+# ── Stage 4: Bridge BBQ result → qcirc HamiltonianSpec ────────────────────────
+[[stage]]
+id = "bbq_to_qcirc"
+type = "http_post"
+depends_on = ["bbq_quantize"]
+params = { path = "/bbq/to-qcirc" }

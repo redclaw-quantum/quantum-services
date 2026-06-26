@@ -11,11 +11,13 @@
 # Key changes vs the original:
 # - Every stage now uses the generic `http_post` orchestrate stage; no
 #   per-endpoint Rust struct is needed.
-# - `QemSolve` was the original stage 1 — it remains out of scope for the
+# - `QemSolve` was the original stage 1 — it remains out of scope for this
 #   smoke test because it needs the (substantial) qem-rs FEM stack on
 #   PATH and a geometry input. Instead this template starts from
 #   pre-computed S-parameters which the user provides as a pipeline param
-#   `s_params={…}`. Future iteration can prepend a `qem_solve` stage.
+#   `s_params={…}`. The FEM-driven front-end (geometry → qem_sweep →
+#   bbq_quantize) is now implemented as a dedicated pipeline:
+#   `em-to-hamiltonian.toml` (the qem→bbq bridge, fully wired).
 # - `BbqQuantize` and `BbqToQcirc` (which were never registered as stage
 #   variants) are now plain `http_post` calls to `/bbq/quantize` and
 #   `/bbq/to-qcirc`. The `/bbq/to-qcirc` endpoint is new in this session;

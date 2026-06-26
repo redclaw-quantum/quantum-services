@@ -2161,6 +2161,19 @@ async fn qem_antenna_sweep(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
     qem_proxy("/antenna_sweep", req).await
 }
 
+/// POST /qem/sweep — driven-modal frequency sweep → S/Z/Y-parameters (the HFSS
+/// driven-modal equivalent). Takes geometry + sweep range, returns
+/// `{ s_parameters, .. }` where `s_parameters` is directly consumable by
+/// `/bbq/quantize` (Black-Box Quantization → Hamiltonian).
+async fn qem_sweep(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    qem_proxy("/sweep", req).await
+}
+
+/// POST /qem/sparams — extract S-parameters for a supplied frequency set.
+async fn qem_sparams(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
+    qem_proxy("/sparams", req).await
+}
+
 // ---------------------------------------------------------------------------
 // rustybbq endpoints
 // ---------------------------------------------------------------------------
@@ -6054,6 +6067,8 @@ fn build_router() -> Router {
         .route("/qem/solve_lom_cavity", post(qem_solve_lom_cavity))
         .route("/qem/solve_cavity_transmon", post(qem_solve_cavity_transmon))
         .route("/qem/antenna_sweep", post(qem_antenna_sweep))
+        .route("/qem/sweep", post(qem_sweep))
+        .route("/qem/sparams", post(qem_sparams))
         // rustybbq
         .route("/bbq/health", get(bbq_health))
         .route("/bbq/quantize", post(bbq_quantize))
