@@ -43,11 +43,14 @@ timeout_secs = 300
 [stage.params]
 template = "chip-to-calibration"
 
-# ── Stage 4: Re-optimize design (conditional: only if calibration found critical issues) ──
+# ── Stage 4: Targeted re-design (conditional: only if calibration found critical issues) ──
+# Closes the loop precisely: consumes the twin's TriggerInverseDesign hints and
+# re-invokes QPUDIDP inverse design seeded by each hint's target frequency /
+# anharmonicity / warm-start geometry — rather than a blanket whole-chip rerun.
 
 [[stage]]
 id = "reoptimize"
-type = "pipeline_call"
+type = "recal_dispatch"
 depends_on = ["calibration_phase"]
 timeout_secs = 600
 
@@ -55,9 +58,6 @@ timeout_secs = 600
 field = "calibration_phase.output.recal_actions.critical_count"
 op = "gt"
 value = 0
-
-[stage.params]
-template = "design-to-chip"
 
 [stage.fallback]
 type = "skip"

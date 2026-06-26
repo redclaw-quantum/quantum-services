@@ -101,6 +101,10 @@ pub fn register_standard_stages(registry: &mut StageRegistry) {
         Arc::new(twin::metrology_acquire::MetrologyAcquireStage::new()),
     );
     registry.register(
+        StageType::RecalDispatch,
+        Arc::new(twin::recal_dispatch::RecalDispatchStage::new()),
+    );
+    registry.register(
         StageType::QexplorePareto,
         Arc::new(explore::pareto::QexploreParetoStage::new()),
     );

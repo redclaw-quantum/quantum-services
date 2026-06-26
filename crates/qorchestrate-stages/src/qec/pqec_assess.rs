@@ -41,14 +41,19 @@ fn resolve(input: &Value, direct: &str, sources: &[(&str, &[&str])]) -> Option<f
         return Some(v);
     }
     for (src, keys) in sources {
-        if let Some(n) = input.get(src) {
-            if let Some(v) = keys.iter().find_map(|k| n.get(*k)).and_then(avg_or_scalar) {
-                return Some(v);
-            }
+        if let Some(v) = input
+            .get(src)
+            .and_then(|n| keys.iter().find_map(|k| n.get(*k)))
+            .and_then(avg_or_scalar)
+        {
+            return Some(v);
         }
     }
     None
 }
+
+/// `(field_name, [(upstream_output_key, [candidate_field_names])])`
+type FieldSources = (&'static str, &'static [(&'static str, &'static [&'static str])]);
 
 /// Build the `/pqec/assess` request from upstream stage outputs.
 ///
@@ -60,7 +65,7 @@ fn resolve(input: &Value, direct: &str, sources: &[(&str, &[&str])]) -> Option<f
 /// and the coherence from the device-sim stage.
 pub fn build_assess_request(input: &Value) -> Value {
     let mut req = serde_json::Map::new();
-    let fields: &[(&str, &[(&str, &[&str])])] = &[
+    let fields: &[FieldSources] = &[
         (
             "gate_fidelity",
             &[

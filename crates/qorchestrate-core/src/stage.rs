@@ -90,6 +90,10 @@ pub enum StageType {
     /// Acquire a (simulated-instrument) characterization of a design → compare
     /// → twin + recalibration (closes the loop without a hand-supplied record).
     MetrologyAcquire,
+    /// Consume the twin's `TriggerInverseDesign` recalibration hints and re-invoke
+    /// QPUDIDP inverse design *seeded by each hint* (targeted re-design — the loop
+    /// closer, vs a blanket whole-chip rerun).
+    RecalDispatch,
     BenchPredict,
     QexplorePareto,
     FreqYield,
