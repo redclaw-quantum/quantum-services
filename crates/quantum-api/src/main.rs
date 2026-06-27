@@ -993,10 +993,21 @@ fn default_fidelity() -> f64 { 0.999 }
 /// fields but are now called from orchestrate pipelines where upstream stage
 /// output (e.g. inverse_design) is the natural source.
 fn resolve_hamiltonian_target(req: &Value) -> (f64, f64) {
-    let direct = req.get("qubit_freq").and_then(|v| v.as_f64())
-        .or_else(|| req.get("qubit_freq_ghz").and_then(|v| v.as_f64()));
-    let direct_anh = req.get("anharmonicity").and_then(|v| v.as_f64())
-        .or_else(|| req.get("anharmonicity_mhz").and_then(|v| v.as_f64()));
+    // Accept all three HamiltonianParams field-name conventions (see
+    // quantum-gaps/SHARED-IR-AUDIT.md): `qubit_freq[_ghz]` (quantum-services),
+    // `qubit_frequency_ghz` (qem-core), `qubit_frequency` (qpu-didp-core newtype).
+    let freq_of = |o: &Value| {
+        o.get("qubit_freq").and_then(|v| v.as_f64())
+            .or_else(|| o.get("qubit_freq_ghz").and_then(|v| v.as_f64()))
+            .or_else(|| o.get("qubit_frequency_ghz").and_then(|v| v.as_f64()))
+            .or_else(|| o.get("qubit_frequency").and_then(|v| v.as_f64()))
+    };
+    let anh_of = |o: &Value| {
+        o.get("anharmonicity").and_then(|v| v.as_f64())
+            .or_else(|| o.get("anharmonicity_mhz").and_then(|v| v.as_f64()))
+    };
+    let direct = freq_of(req);
+    let direct_anh = anh_of(req);
     if let (Some(f), Some(a)) = (direct, direct_anh) {
         return (f, a);
     }
@@ -1004,14 +1015,10 @@ fn resolve_hamiltonian_target(req: &Value) -> (f64, f64) {
     if let Value::Object(map) = req {
         for (k, v) in map {
             if !k.ends_with("_output") { continue; }
-            let h = v.get("best_candidate")
-                .and_then(|c| c.get("predicted_hamiltonian"));
-            if let Some(h) = h {
-                let f = h.get("qubit_frequency").and_then(|x| x.as_f64());
-                let a = h.get("anharmonicity").and_then(|x| x.as_f64());
-                if let (Some(f), Some(a)) = (f, a) {
-                    return (f, a);
-                }
+            if let Some(h) = v.get("best_candidate").and_then(|c| c.get("predicted_hamiltonian"))
+                && let (Some(f), Some(a)) = (freq_of(h), anh_of(h))
+            {
+                return (f, a);
             }
         }
     }
@@ -6361,6 +6368,41 @@ mod tests {
         http::{Request, StatusCode},
     };
     use tower::util::ServiceExt as _;
+
+    // ── shared-IR: HamiltonianParams convention bridging ─────────────────────
+
+    /// The Hamiltonian-target resolver must accept all three field-name
+    /// conventions (quantum-gaps/SHARED-IR-AUDIT.md) so a cross-subsystem payload
+    /// isn't silently defaulted to 5.0 GHz.
+    #[test]
+    fn resolve_hamiltonian_target_accepts_all_conventions() {
+        // quantum-services: qubit_freq_ghz
+        assert_eq!(
+            resolve_hamiltonian_target(&json!({"qubit_freq_ghz": 5.1, "anharmonicity_mhz": -210.0})),
+            (5.1, -210.0)
+        );
+        // qem-core: qubit_frequency_ghz (the convention the old resolver missed)
+        assert_eq!(
+            resolve_hamiltonian_target(&json!({"qubit_frequency_ghz": 5.2, "anharmonicity_mhz": -205.0})),
+            (5.2, -205.0)
+        );
+        // qpu-didp-core newtype: qubit_frequency / anharmonicity
+        assert_eq!(
+            resolve_hamiltonian_target(&json!({"qubit_frequency": 5.3, "anharmonicity": -200.0})),
+            (5.3, -200.0)
+        );
+        // QPUDIDP stage-output shape, with qem-convention fields inside
+        let staged = json!({
+            "inverse_design_output": {
+                "best_candidate": {
+                    "predicted_hamiltonian": {"qubit_frequency_ghz": 5.4, "anharmonicity_mhz": -195.0}
+                }
+            }
+        });
+        assert_eq!(resolve_hamiltonian_target(&staged), (5.4, -195.0));
+        // genuinely-missing target still falls back to the documented default
+        assert_eq!(resolve_hamiltonian_target(&json!({})).0, 5.0);
+    }
 
     // ── BBQ health ──────────────────────────────────────────────────────────
 
