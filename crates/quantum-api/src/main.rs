@@ -1125,6 +1125,65 @@ async fn readout_fidelity(
 }
 
 #[derive(Deserialize)]
+struct XtalkTunableCouplerReq {
+    freq_a: f64,
+    freq_b: f64,
+    #[serde(default = "default_anharm_neg")]
+    alpha_a: f64,
+    #[serde(default = "default_anharm_neg")]
+    alpha_b: f64,
+    g_ac: f64,
+    g_bc: f64,
+    #[serde(default)]
+    g_direct: f64,
+    #[serde(default = "default_coupler_anharm")]
+    coupler_anharmonicity: f64,
+    search_lo: f64,
+    search_hi: f64,
+    #[serde(default = "default_zz_levels")]
+    n_levels: usize,
+}
+fn default_anharm_neg() -> f64 { -250.0 }
+fn default_coupler_anharm() -> f64 { -200.0 }
+fn default_zz_levels() -> usize { 4 }
+
+/// Tunable-coupler ZZ-cancellation: decoupling (g_eff=0) and exact ZZ=0 bias points.
+async fn xtalk_tunable_coupler(Json(req): Json<XtalkTunableCouplerReq>) -> ApiResult<Json<Value>> {
+    let (fa, fb, aa, ab, gac, gbc, gd, ca, lo, hi, nl) = (
+        req.freq_a.to_string(),
+        req.freq_b.to_string(),
+        req.alpha_a.to_string(),
+        req.alpha_b.to_string(),
+        req.g_ac.to_string(),
+        req.g_bc.to_string(),
+        req.g_direct.to_string(),
+        req.coupler_anharmonicity.to_string(),
+        req.search_lo.to_string(),
+        req.search_hi.to_string(),
+        req.n_levels.to_string(),
+    );
+    let result = run_tool(
+        "xtalk",
+        &[
+            "--json",
+            "tunable-coupler",
+            "--freq-a", &fa,
+            "--freq-b", &fb,
+            "--alpha-a", &aa,
+            "--alpha-b", &ab,
+            "--g-ac", &gac,
+            "--g-bc", &gbc,
+            "--g-direct", &gd,
+            "--coupler-anharmonicity", &ca,
+            "--search-lo", &lo,
+            "--search-hi", &hi,
+            "--n-levels", &nl,
+        ],
+    )?;
+    Ok(Json(result))
+}
+
+#[derive(Deserialize)]
 struct ReadoutMistReq {
     chi: f64,
     kappa: f64,
@@ -6076,6 +6135,7 @@ fn build_router() -> Router {
         .route("/xtalk/zz", post(xtalk_zz))
         .route("/xtalk/crosstalk", post(xtalk_crosstalk))
         .route("/xtalk/simulate", post(xtalk_simulate))
+        .route("/xtalk/tunable-coupler", post(xtalk_tunable_coupler))
         // readout
         .route("/readout/health", get(readout_health))
         .route("/readout/design", post(readout_design))
