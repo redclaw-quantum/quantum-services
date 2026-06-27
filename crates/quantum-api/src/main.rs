@@ -1124,6 +1124,73 @@ async fn readout_fidelity(
     Ok(Json(result))
 }
 
+#[derive(Deserialize)]
+struct ReadoutMistReq {
+    chi: f64,
+    kappa: f64,
+    #[serde(default = "default_detuning")]
+    detuning: f64,
+    #[serde(default = "default_anharm")]
+    anharmonicity: f64,
+    #[serde(default = "default_qnd_target")]
+    qnd_target: f64,
+}
+fn default_detuning() -> f64 { 1500.0 }
+fn default_anharm() -> f64 { 200.0 }
+fn default_qnd_target() -> f64 { 0.01 }
+
+/// Measurement-induced state transition (MIST) photon ceiling for dispersive readout.
+async fn readout_mist(Json(req): Json<ReadoutMistReq>) -> ApiResult<Json<Value>> {
+    let (chi, kappa, det, anh, qnd) = (
+        req.chi.to_string(),
+        req.kappa.to_string(),
+        req.detuning.to_string(),
+        req.anharmonicity.to_string(),
+        req.qnd_target.to_string(),
+    );
+    let result = run_tool("readout", &[
+        "--json", "mist",
+        "--chi", &chi, "--kappa", &kappa,
+        "--detuning", &det, "--anharmonicity", &anh, "--qnd-target", &qnd,
+    ])?;
+    Ok(Json(result))
+}
+
+#[derive(Deserialize)]
+struct ReadoutErasureReq {
+    t1: f64,
+    chi: f64,
+    kappa: f64,
+    #[serde(default = "default_check_window")]
+    check_window: f64,
+    #[serde(default = "default_p_pauli")]
+    p_pauli: f64,
+    #[serde(default = "default_erasure_photons")]
+    n_photons: f64,
+}
+fn default_check_window() -> f64 { 400.0 }
+fn default_p_pauli() -> f64 { 1e-4 }
+fn default_erasure_photons() -> f64 { 5.0 }
+
+/// Dual-rail erasure-qubit analysis + fault-tolerance threshold advantage.
+async fn readout_erasure(Json(req): Json<ReadoutErasureReq>) -> ApiResult<Json<Value>> {
+    let (t1, cw, chi, kappa, pp, np) = (
+        req.t1.to_string(),
+        req.check_window.to_string(),
+        req.chi.to_string(),
+        req.kappa.to_string(),
+        req.p_pauli.to_string(),
+        req.n_photons.to_string(),
+    );
+    let result = run_tool("readout", &[
+        "--json", "erasure",
+        "--t1", &t1, "--check-window", &cw,
+        "--chi", &chi, "--kappa", &kappa,
+        "--p-pauli", &pp, "--n-photons", &np,
+    ])?;
+    Ok(Json(result))
+}
+
 // ---------------------------------------------------------------------------
 // bench endpoints
 // ---------------------------------------------------------------------------
@@ -6015,6 +6082,8 @@ fn build_router() -> Router {
         .route("/readout/multiplex", post(readout_multiplex))
         .route("/readout/optimize", post(readout_optimize))
         .route("/readout/fidelity", post(readout_fidelity))
+        .route("/readout/mist", post(readout_mist))
+        .route("/readout/erasure", post(readout_erasure))
         // bench
         .route("/bench/health", get(bench_health))
         .route("/bench/predict", post(bench_predict))
