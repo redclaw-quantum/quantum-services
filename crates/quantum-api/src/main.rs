@@ -1320,6 +1320,42 @@ fn default_reset_floor() -> f64 { 1e-3 }
 fn default_reset_meas() -> f64 { 200.0 }
 fn default_reset_drive() -> f64 { 50.0 }
 
+#[derive(serde::Deserialize)]
+struct ReadoutQndReq {
+    #[serde(default = "default_qnd_infidelity")]
+    qnd_infidelity: f64,
+    #[serde(default = "default_qnd_assignment")]
+    assignment_fidelity: f64,
+    #[serde(default = "default_qnd_repeats")]
+    repeats: u32,
+    #[serde(default = "default_qnd_t1")]
+    t1: f64,
+    #[serde(default = "default_qnd_readout")]
+    readout_time: f64,
+}
+fn default_qnd_infidelity() -> f64 { 0.005 }
+fn default_qnd_assignment() -> f64 { 0.99 }
+fn default_qnd_repeats() -> u32 { 5 }
+fn default_qnd_t1() -> f64 { 80.0 }
+fn default_qnd_readout() -> f64 { 500.0 }
+
+/// Repeated-measurement QND benchmark: SPAM-deconvolved intrinsic QND fidelity.
+async fn readout_qnd(Json(req): Json<ReadoutQndReq>) -> ApiResult<Json<Value>> {
+    let (eps, fa, rep, t1, ro) = (
+        req.qnd_infidelity.to_string(),
+        req.assignment_fidelity.to_string(),
+        req.repeats.to_string(),
+        req.t1.to_string(),
+        req.readout_time.to_string(),
+    );
+    let result = run_tool("readout", &[
+        "--json", "qnd",
+        "--qnd-infidelity", &eps, "--assignment-fidelity", &fa,
+        "--repeats", &rep, "--t1", &t1, "--readout-time", &ro,
+    ])?;
+    Ok(Json(result))
+}
+
 /// Active/fast qubit reset: residual excited-state population vs feedback rounds.
 async fn readout_reset(Json(req): Json<ReadoutResetReq>) -> ApiResult<Json<Value>> {
     let (p0, eff, rounds, floor, meas, drive) = (
@@ -6308,6 +6344,7 @@ fn build_router() -> Router {
         .route("/readout/reset", post(readout_reset))
         .route("/readout/feedforward", post(readout_feedforward))
         .route("/readout/leakage", post(readout_leakage))
+        .route("/readout/qnd", post(readout_qnd))
         .route("/readout/paramp", post(readout_paramp))
         // bench
         .route("/bench/health", get(bench_health))
