@@ -1250,6 +1250,167 @@ async fn readout_erasure(Json(req): Json<ReadoutErasureReq>) -> ApiResult<Json<V
     Ok(Json(result))
 }
 
+#[derive(Deserialize)]
+struct ReadoutParampReq {
+    #[serde(default = "default_paramp_kind")]
+    kind: String,
+    #[serde(default = "default_paramp_gain")]
+    gain: f64,
+    #[serde(default = "default_paramp_freq")]
+    freq: f64,
+    #[serde(default = "default_paramp_saturation")]
+    saturation: f64,
+    #[serde(default = "default_paramp_bandwidth")]
+    bandwidth: f64,
+    #[serde(default = "default_paramp_phase_noise")]
+    phase_noise: f64,
+    #[serde(default = "default_paramp_signal")]
+    signal_power: f64,
+}
+fn default_paramp_kind() -> String { "jpa".to_string() }
+fn default_paramp_gain() -> f64 { 20.0 }
+fn default_paramp_freq() -> f64 { 6.0 }
+fn default_paramp_saturation() -> f64 { -100.0 }
+fn default_paramp_bandwidth() -> f64 { 500.0 }
+fn default_paramp_phase_noise() -> f64 { -110.0 }
+fn default_paramp_signal() -> f64 { -130.0 }
+
+/// Parametric first-stage amplifier: gain compression, added noise, pump.
+async fn readout_paramp(Json(req): Json<ReadoutParampReq>) -> ApiResult<Json<Value>> {
+    let (gain, freq, sat, bw, pn, sig) = (
+        req.gain.to_string(),
+        req.freq.to_string(),
+        req.saturation.to_string(),
+        req.bandwidth.to_string(),
+        req.phase_noise.to_string(),
+        req.signal_power.to_string(),
+    );
+    let result = run_tool("readout", &[
+        "--json", "paramp",
+        "--kind", &req.kind,
+        "--gain", &gain, "--freq", &freq,
+        "--saturation", &sat, "--bandwidth", &bw,
+        "--phase-noise", &pn, "--signal-power", &sig,
+    ])?;
+    Ok(Json(result))
+}
+
+#[derive(Deserialize)]
+struct ReadoutResetReq {
+    #[serde(default = "default_reset_kind")]
+    kind: String,
+    #[serde(default = "default_reset_p0")]
+    p0: f64,
+    #[serde(default = "default_reset_efficiency")]
+    efficiency: f64,
+    #[serde(default = "default_reset_rounds")]
+    rounds: u32,
+    #[serde(default = "default_reset_floor")]
+    thermal_floor: f64,
+    #[serde(default = "default_reset_meas")]
+    meas_time: f64,
+    #[serde(default = "default_reset_drive")]
+    drive_time: f64,
+}
+fn default_reset_kind() -> String { "feedback".to_string() }
+fn default_reset_p0() -> f64 { 0.1 }
+fn default_reset_efficiency() -> f64 { 0.9 }
+fn default_reset_rounds() -> u32 { 3 }
+fn default_reset_floor() -> f64 { 1e-3 }
+fn default_reset_meas() -> f64 { 200.0 }
+fn default_reset_drive() -> f64 { 50.0 }
+
+/// Active/fast qubit reset: residual excited-state population vs feedback rounds.
+async fn readout_reset(Json(req): Json<ReadoutResetReq>) -> ApiResult<Json<Value>> {
+    let (p0, eff, rounds, floor, meas, drive) = (
+        req.p0.to_string(),
+        req.efficiency.to_string(),
+        req.rounds.to_string(),
+        req.thermal_floor.to_string(),
+        req.meas_time.to_string(),
+        req.drive_time.to_string(),
+    );
+    let result = run_tool("readout", &[
+        "--json", "reset",
+        "--kind", &req.kind,
+        "--p0", &p0, "--efficiency", &eff, "--rounds", &rounds,
+        "--thermal-floor", &floor, "--meas-time", &meas, "--drive-time", &drive,
+    ])?;
+    Ok(Json(result))
+}
+
+#[derive(Deserialize)]
+struct ReadoutFeedforwardReq {
+    #[serde(default = "default_ff_meas")]
+    meas_time: f64,
+    #[serde(default = "default_ff_classical")]
+    classical_latency: f64,
+    #[serde(default = "default_ff_apply")]
+    apply_time: f64,
+    #[serde(default = "default_ff_t2")]
+    spectator_t2: f64,
+    #[serde(default = "default_ff_assign")]
+    assignment_error: f64,
+    #[serde(default = "default_ff_t1")]
+    t1: f64,
+}
+fn default_ff_meas() -> f64 { 400.0 }
+fn default_ff_classical() -> f64 { 100.0 }
+fn default_ff_apply() -> f64 { 50.0 }
+fn default_ff_t2() -> f64 { 50.0 }
+fn default_ff_assign() -> f64 { 0.01 }
+fn default_ff_t1() -> f64 { 50.0 }
+
+/// Mid-circuit measurement + feedforward latency and error budget.
+async fn readout_feedforward(Json(req): Json<ReadoutFeedforwardReq>) -> ApiResult<Json<Value>> {
+    let (meas, cl, apply, t2, assign, t1) = (
+        req.meas_time.to_string(),
+        req.classical_latency.to_string(),
+        req.apply_time.to_string(),
+        req.spectator_t2.to_string(),
+        req.assignment_error.to_string(),
+        req.t1.to_string(),
+    );
+    let result = run_tool("readout", &[
+        "--json", "feedforward",
+        "--meas-time", &meas, "--classical-latency", &cl, "--apply-time", &apply,
+        "--spectator-t2", &t2, "--assignment-error", &assign, "--t1", &t1,
+    ])?;
+    Ok(Json(result))
+}
+
+#[derive(Deserialize)]
+struct ReadoutLeakageReq {
+    #[serde(default = "default_leak_photons")]
+    n_photons: f64,
+    #[serde(default = "default_leak_coupling")]
+    nonlinear_coupling: f64,
+    #[serde(default = "default_leak_detuning")]
+    detuning: f64,
+    #[serde(default = "default_leak_time")]
+    readout_time: f64,
+}
+fn default_leak_photons() -> f64 { 5.0 }
+fn default_leak_coupling() -> f64 { 20.0 }
+fn default_leak_detuning() -> f64 { 1500.0 }
+fn default_leak_time() -> f64 { 500.0 }
+
+/// Readout-induced leakage (nonlinear coupling) — distinct from MIST.
+async fn readout_leakage(Json(req): Json<ReadoutLeakageReq>) -> ApiResult<Json<Value>> {
+    let (np, nl, det, rt) = (
+        req.n_photons.to_string(),
+        req.nonlinear_coupling.to_string(),
+        req.detuning.to_string(),
+        req.readout_time.to_string(),
+    );
+    let result = run_tool("readout", &[
+        "--json", "leakage",
+        "--n-photons", &np, "--nonlinear-coupling", &nl,
+        "--detuning", &det, "--readout-time", &rt,
+    ])?;
+    Ok(Json(result))
+}
+
 // ---------------------------------------------------------------------------
 // bench endpoints
 // ---------------------------------------------------------------------------
@@ -6144,6 +6305,10 @@ fn build_router() -> Router {
         .route("/readout/fidelity", post(readout_fidelity))
         .route("/readout/mist", post(readout_mist))
         .route("/readout/erasure", post(readout_erasure))
+        .route("/readout/reset", post(readout_reset))
+        .route("/readout/feedforward", post(readout_feedforward))
+        .route("/readout/leakage", post(readout_leakage))
+        .route("/readout/paramp", post(readout_paramp))
         // bench
         .route("/bench/health", get(bench_health))
         .route("/bench/predict", post(bench_predict))
