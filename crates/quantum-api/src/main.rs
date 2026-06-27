@@ -4417,29 +4417,10 @@ async fn scq_simulate(Json(req): Json<Value>) -> ApiResult<Json<Value>> {
     ) {
         (ej, ec)
     } else {
-        // Derive from a Hamiltonian target. Look first at top-level fields,
-        // then at any upstream `<dep>_output.best_candidate.predicted_hamiltonian`.
-        let (freq_ghz, anharm_mhz) = req
-            .get("qubit_frequency_ghz").and_then(|v| v.as_f64())
-            .zip(req.get("anharmonicity_mhz").and_then(|v| v.as_f64()))
-            .or_else(|| {
-                if let Value::Object(map) = &req {
-                    for (k, v) in map {
-                        if !k.ends_with("_output") { continue; }
-                        let h = v.get("best_candidate")
-                            .and_then(|c| c.get("predicted_hamiltonian"));
-                        if let Some(h) = h {
-                            let f = h.get("qubit_frequency").and_then(|x| x.as_f64());
-                            let a = h.get("anharmonicity").and_then(|x| x.as_f64());
-                            if let (Some(f), Some(a)) = (f, a) {
-                                return Some((f, a));
-                            }
-                        }
-                    }
-                }
-                None
-            })
-            .unwrap_or((5.0, -200.0));
+        // Derive from a Hamiltonian target via the centralized resolver, which
+        // accepts all three field-name conventions at top level and in upstream
+        // `<dep>_output.best_candidate.predicted_hamiltonian` (shared-IR audit).
+        let (freq_ghz, anharm_mhz) = resolve_hamiltonian_target(&req);
         // Transmon limit: α ≈ -E_C ⇒ E_C ≈ |α|/1000 GHz; f ≈ √(8·E_J·E_C) − E_C
         let ec = (anharm_mhz.abs() / 1000.0).max(0.05);
         let ej = ((freq_ghz + ec).powi(2)) / (8.0 * ec);
